@@ -15,14 +15,15 @@
     return (name || '?').trim().charAt(0).toUpperCase();
   }
 
-  // Deterministic two-tone gradient per server so cards without a banner
-  // still look distinct and colorful instead of all sharing one placeholder.
+  // Deterministic gradient per server, staying within the brand's cyan→violet→gold
+  // family instead of hashing into arbitrary, clashing rainbow hues.
+  const BRAND_HUES = [192, 189, 258, 271, 291, 38];
   function fallbackBanner(seed) {
     let h = 0;
     for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    const hue1 = h % 360;
-    const hue2 = (hue1 + 55) % 360;
-    return `linear-gradient(135deg, hsl(${hue1},70%,45%), hsl(${hue2},70%,40%))`;
+    const hue1 = BRAND_HUES[h % BRAND_HUES.length];
+    const hue2 = BRAND_HUES[(h >> 3) % BRAND_HUES.length];
+    return `linear-gradient(135deg, hsl(${hue1},62%,32%), hsl(${hue2},58%,22%))`;
   }
 
   let currentUserId = null;
