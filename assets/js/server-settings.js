@@ -320,7 +320,13 @@
     $('sName').value = srv.name || '';
     $('sDesc').value = srv.description || '';
     $('icoPrev').innerHTML = srv.icon_url ? `<img src="${UI.esc(srv.icon_url)}">` : '<i class="fa-regular fa-image"></i>';
-    $('banPrev').innerHTML = srv.banner_url ? `<img src="${UI.esc(srv.banner_url)}">` : '<i class="fa-regular fa-image"></i>';
+    if (srv.banner_url) {
+      $('banPrev').innerHTML = `<img src="${UI.esc(srv.banner_url)}">`;
+      $('banPrev').style.background = '';
+    } else {
+      $('banPrev').innerHTML = '<span style="font-size:9.5px;color:#5A5E68;font-weight:600;">Default</span>';
+      $('banPrev').style.background = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
+    }
     setAccent(srv.theme?.accent || '#2FBF87');
     icoFile = banFile = null;
     $('sIcon').value = ''; $('sBanner').value = '';

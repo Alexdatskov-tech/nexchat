@@ -73,6 +73,24 @@
       <span class="topic hidden" id="chTopic"></span>
     </header>
 
+    <div class="vroom hidden" id="vroom">
+      <div class="vroom-head">
+        <span class="vr-ico"><i class="fa-solid fa-volume-high"></i></span>
+        <div class="vr-t"><b id="vrName">Voice</b><small id="vrSub"></small></div>
+        <div class="vr-right">
+          <button class="btn btn-ghost btn-sm" id="vrChat"><i class="fa-solid fa-comment"></i> Chat</button>
+        </div>
+      </div>
+      <div class="vroom-stage" id="vrStage"></div>
+      <div class="vroom-bar">
+        <button class="vbtn" id="vrMute" title="Mute"><i class="fa-solid fa-microphone"></i></button>
+        <button class="vbtn" id="vrDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
+        <button class="vbtn" id="vrCam" title="Camera"><i class="fa-solid fa-video"></i></button>
+        <button class="vbtn" id="vrShare" title="Share screen"><i class="fa-solid fa-display"></i></button>
+        <button class="vbtn hang" id="vrLeave" title="Disconnect"><i class="fa-solid fa-phone-slash"></i></button>
+      </div>
+    </div>
+
     <div class="stage hidden" id="stage"><div class="stage-grid" id="stageGrid"></div></div>
 
     <div class="msgs" id="msgs"></div>

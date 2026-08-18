@@ -11,6 +11,9 @@ window.Voice = (function () {
   ];
 
   let sig = null, local = null, screen = null;
+  let actx = null, rafId = null;
+  const meters = new Map();   // userId -> { analyser, data, speaking }
+  let onSpeak = () => {};
   const peers = new Map();          // userId -> { pc, stream, el }
   let me = null, chan = null, srvId = null;
   let muted = false, deaf = false, cam = false, sharing = false;
@@ -21,6 +24,41 @@ window.Voice = (function () {
 
   function state() {
     return { active: !!chan, channel: chan, muted, deaf, cam, sharing, peers: [...peers.keys()], members };
+  }
+
+  /* Lightweight RMS meter per stream — drives the speaking ring on tiles. */
+  function meter(uid, stream) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const src = actx.createMediaStreamSource(stream);
+      const an = actx.createAnalyser();
+      an.fftSize = 512;
+      an.smoothingTimeConstant = 0.75;
+      src.connect(an);
+      meters.set(uid, { analyser: an, data: new Uint8Array(an.frequencyBinCount), speaking: false });
+      if (!rafId) tick();
+    } catch {}
+  }
+
+  function tick() {
+    let changed = false;
+    meters.forEach((m, uid) => {
+      m.analyser.getByteFrequencyData(m.data);
+      let sum = 0;
+      for (let i = 0; i < m.data.length; i++) sum += m.data[i] * m.data[i];
+      const rms = Math.sqrt(sum / m.data.length);
+      const on = rms > 12 && !(uid === me?.id && muted);
+      if (on !== m.speaking) { m.speaking = on; changed = true; }
+    });
+    if (changed) onSpeak(speaking());
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function speaking() {
+    const s = new Set();
+    meters.forEach((m, uid) => { if (m.speaking) s.add(uid); });
+    return s;
   }
 
   async function getMic() {
@@ -49,6 +87,7 @@ window.Voice = (function () {
         if (!rec.stream.getTracks().some((x) => x.id === t.id)) rec.stream.addTrack(t);
       });
       attach(uid, rec);
+      if (rec.stream.getAudioTracks().length && !meters.has(uid)) meter(uid, rec.stream);
       onChange(state());
     };
     pc.onconnectionstatechange = () => {
@@ -73,6 +112,7 @@ window.Voice = (function () {
   }
 
   function drop(uid) {
+    meters.delete(uid);
     const p = peers.get(uid);
     if (p) { try { p.pc.close(); } catch {} peers.delete(uid); }
     document.getElementById('va-' + uid)?.remove();
@@ -84,14 +124,17 @@ window.Voice = (function () {
     sig?.send({ type: 'broadcast', event: 'sig', payload: { type, from: me.id, ...payload } });
   }
 
-  async function join(channel, serverId, profile, cb) {
+  async function join(channel, serverId, profile, cb, speakCb) {
     if (chan) await leave();
-    me = profile; chan = channel; srvId = serverId; onChange = cb || (() => {});
+    me = profile; chan = channel; srvId = serverId;
+    onChange = cb || (() => {});
+    onSpeak = speakCb || (() => {});
 
     try { await getMic(); }
     catch { UI.toast('NexChat needs microphone access to join voice.', true); chan = null; throw new Error('mic denied'); }
 
     members.set(me.id, me);
+    meter(me.id, local);
 
     await window.db.from('voice_sessions').upsert({
       channel_id: channel.id, user_id: me.id, server_id: serverId,
@@ -159,7 +202,8 @@ window.Voice = (function () {
     if (!chan) return;
     send('bye', {});
     peers.forEach((p, uid) => { try { p.pc.close(); } catch {} document.getElementById('va-' + uid)?.remove(); });
-    peers.clear(); members.clear();
+    peers.clear(); members.clear(); meters.clear();
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (sig) { await window.db.removeChannel(sig); sig = null; }
     await window.db.from('voice_sessions').delete().eq('channel_id', chan.id).eq('user_id', me.id);
     if (local) { local.getTracks().forEach((t) => t.stop()); local = null; }
@@ -236,5 +280,5 @@ window.Voice = (function () {
   function localStream() { return local; }
   function peerStream(uid) { return peers.get(uid)?.stream; }
 
-  return { join, leave, setMute, setDeaf, toggleCam, toggleShare, state, localStream, peerStream, ICE };
+  return { join, leave, setMute, setDeaf, toggleCam, toggleShare, state, localStream, peerStream, speaking, ICE };
 })();

@@ -4,14 +4,9 @@
 
   // Deterministic banner per server, drawn from the accent's own hue family so
   // the grid stays cohesive instead of turning into random neon.
-  const HUES = [158, 168, 190, 205, 262, 40];
-  function banner(seed) {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    const a = HUES[h % HUES.length], b = HUES[(h >> 4) % HUES.length];
-    // Tinted default artwork, hue-shifted per server so no two look identical.
-    return `linear-gradient(120deg, hsl(${a} 42% 26%), hsl(${b} 38% 17%)), url('assets/img/default-banner.svg')`;
-  }
+  // Default banner is a clean light neutral until an owner uploads one.
+  const DEFAULT_BANNER = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
+  function banner() { return DEFAULT_BANNER; }
 
   // Applies the saved dashboard background from profiles.theme.
   function applyDashboardBg(theme) {
@@ -31,11 +26,11 @@
   function card(s) {
     const count = s.server_members?.[0]?.count ?? 0;
     const owner = s.owner_id === me.id;
-    const bg = s.banner_url ? `background-image:url('${UI.esc(s.banner_url)}')` : `background:${banner(s.id)}`;
+    const bg = s.banner_url ? `background-image:url('${UI.esc(s.banner_url)}')` : `background:${banner()}`;
     const ico = s.icon_url ? `<img src="${UI.esc(s.icon_url)}" alt="">` : UI.initial(s.name);
     return `
       <button class="scard" data-id="${s.id}">
-        <div class="scard-banner" style="${bg};background-size:cover;background-blend-mode:multiply;"></div>
+        <div class="scard-banner" style="${bg};background-size:cover;"></div>
         <div class="scard-ico">${ico}</div>
         <div class="scard-body">
           <div class="scard-name">

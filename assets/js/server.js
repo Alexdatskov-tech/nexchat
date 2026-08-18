@@ -88,6 +88,7 @@
     $('chTopic').textContent = ch.topic || '';
     $('chTopic').classList.toggle('hidden', !ch.topic);
     $('input').placeholder = `Message #${ch.name}`;
+    if (vrOpen) showVoiceRoom(false);
     $('composer').classList.remove('hidden');
     await loadMessages(ch.id);
     listen(ch.id);
@@ -112,7 +113,7 @@
     const name = p.display_name || p.username;
     const mine = m.author_id === me.id;
     const left = grouped
-      ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`
+      ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false })}</span></div>`
       : `<div class="m-av">${UI.avatar(p, 38)}</div>`;
     const head = grouped ? '' :
       `<div class="m-head"><span class="m-name" style="color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
@@ -409,53 +410,105 @@
   }
 
   /* ================= voice ================= */
-  function paintVoice(st) {
-    renderChannels();
-    const dock = $('vcDock'), stageEl = $('stage');
-    if (!st.active) {
-      dock.classList.add('hidden');
-      stageEl.classList.add('hidden');
-      return;
-    }
-    dock.classList.remove('hidden');
-    $('vcName').textContent = st.channel.name;
-    $('vcCount').textContent = `${st.members.size} connected · ${srv.name}`;
+  let vrOpen = false, speakSet = new Set();
+
+  function showVoiceRoom(on) {
+    vrOpen = on;
+    $('vroom').classList.toggle('hidden', !on);
+    $('msgs').classList.toggle('hidden', on);
+    $('composer').classList.toggle('hidden', on || !active);
+    $('stage').classList.add('hidden');
+    if (on) paintRoom(Voice.state());
+  }
+
+  function tileFor(p, st) {
+    const isMe = p.id === me.id;
+    const stream = isMe ? Voice.localStream() : Voice.peerStream(p.id);
+    const live = stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
+    return { p, isMe, stream, live };
+  }
+
+  function paintRoom(st) {
+    if (!st.active) return;
+    $('vrName').textContent = st.channel.name;
+    $('vrSub').textContent = `${st.members.size} connected · ${srv.name}`;
+
+    const set = (id, cls, cond, icon) => {
+      const b = $(id);
+      b.classList.remove('live', 'off');
+      if (cond) b.classList.add(cls);
+      if (icon) b.innerHTML = icon;
+    };
+    set('vrMute', 'off', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
+    set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple"></i>`);
+    set('vrCam', 'live', st.cam);
+    set('vrShare', 'live', st.sharing);
     $('vcMute').classList.toggle('on', st.muted);
     $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
     $('vcDeaf').classList.toggle('on', st.deaf);
     $('vcCam').classList.toggle('on', st.cam);
     $('vcShare').classList.toggle('on', st.sharing);
 
-    const showStage = st.cam || st.sharing || [...st.members.values()].some((p) => p.cam || p.sharing);
-    stageEl.classList.toggle('hidden', !showStage);
-    if (!showStage) return;
+    const grid = $('vrStage');
+    const people = [...st.members.values()];
+    grid.classList.toggle('solo', people.length === 1);
 
-    const grid = $('stageGrid');
-    [...st.members.values()].forEach((p) => {
-      const isMe = p.id === me.id;
-      let tile = grid.querySelector(`[data-t="${p.id}"]`);
-      if (!tile) {
-        tile = document.createElement('div');
-        tile.className = 'tile';
-        tile.dataset.t = p.id;
-        tile.innerHTML = `<video autoplay playsinline ${isMe ? 'muted' : ''}></video>
-          <div class="tile-av"></div>
-          <div class="tile-tag"><span>${MD.esc(p.display_name || p.username)}${isMe ? ' (you)' : ''}</span></div>`;
-        grid.appendChild(tile);
+    people.forEach((p) => {
+      const { isMe, stream, live } = tileFor(p, st);
+      let t = grid.querySelector(`[data-t="${p.id}"]`);
+      if (!t) {
+        t = document.createElement('div');
+        t.className = 'vtile';
+        t.dataset.t = p.id;
+        t.innerHTML = `<video autoplay playsinline ${isMe ? 'muted' : ''}></video>
+          <div class="vt-av"></div><div class="vt-name"></div>`;
+        grid.appendChild(t);
       }
-      const v = tile.querySelector('video');
-      const stream = isMe ? Voice.localStream() : Voice.peerStream(p.id);
-      const hasVid = stream && stream.getVideoTracks().some((t) => t.readyState === 'live');
+      const v = t.querySelector('video');
       if (stream && v.srcObject !== stream) v.srcObject = stream;
-      v.style.display = hasVid ? '' : 'none';
-      tile.querySelector('.tile-av').innerHTML = hasVid ? '' : UI.avatar(p, 52, { halo: false });
-      tile.querySelector('.tile-tag').innerHTML =
-        `${p.muted ? '<i class="fa-solid fa-microphone-slash muted"></i>' : ''}
-         <span>${MD.esc(p.display_name || p.username)}${isMe ? ' (you)' : ''}</span>`;
-      tile.querySelector('.tile-share')?.remove();
-      if (p.sharing) tile.insertAdjacentHTML('beforeend', '<span class="tile-share">Screen</span>');
+      v.style.display = live ? '' : 'none';
+      t.querySelector('.vt-av').innerHTML = live ? '' : UI.avatar(p, 76, { halo: false });
+      t.querySelector('.vt-av').style.display = live ? 'none' : '';
+      t.querySelector('.vt-name').innerHTML =
+        `${p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(p.display_name || p.username)}${isMe ? ' (you)' : ''}</span>`;
+      t.querySelector('.vt-flag')?.remove();
+      if (p.sharing) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
+      t.classList.toggle('speaking', speakSet.has(p.id) && !p.muted);
     });
     [...grid.children].forEach((t) => { if (!st.members.has(t.dataset.t)) t.remove(); });
+  }
+
+  function paintVoice(st) {
+    renderChannels();
+    const dock = $('vcDock');
+    if (!st.active) {
+      dock.classList.add('hidden');
+      $('stage').classList.add('hidden');
+      if (vrOpen) showVoiceRoom(false);
+      return;
+    }
+    dock.classList.remove('hidden');
+    $('vcName').textContent = st.channel.name;
+    $('vcCount').textContent = `${st.members.size} connected · ${srv.name}`;
+    if (vrOpen) paintRoom(st);
+    else {
+      $('vcMute').classList.toggle('on', st.muted);
+      $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
+      $('vcDeaf').classList.toggle('on', st.deaf);
+      $('vcCam').classList.toggle('on', st.cam);
+      $('vcShare').classList.toggle('on', st.sharing);
+    }
+  }
+
+  function onSpeaking(set) {
+    speakSet = set;
+    if (vrOpen) {
+      document.querySelectorAll('.vtile').forEach((t) => {
+        const p = Voice.state().members.get(t.dataset.t);
+        t.classList.toggle('speaking', set.has(t.dataset.t) && !p?.muted);
+      });
+    }
+    document.querySelectorAll('.vc-user').forEach((u) => u.classList.toggle('speaking', set.has(u.dataset.u)));
   }
 
   async function joinVoice(ch) {
@@ -463,17 +516,27 @@
     if (st.active && st.channel.id === ch.id) return;
     if (st.active) await Voice.leave();
     try {
-      await Voice.join(ch, serverId, { ...me, muted: false, deaf: false, cam: false, sharing: false }, paintVoice);
-      UI.toast(`Connected to ${ch.name}`);
+      await Voice.join(ch, serverId, { ...me, muted: false, deaf: false, cam: false, sharing: false }, paintVoice, onSpeaking);
+      showVoiceRoom(true);
     } catch { /* mic denied — Voice already surfaced the reason */ }
   }
 
   function voiceButtons() {
+    $('vrMute').onclick = () => Voice.setMute();
+    $('vrDeaf').onclick = () => Voice.setDeaf();
+    $('vrCam').onclick = () => Voice.toggleCam();
+    $('vrShare').onclick = () => Voice.toggleShare();
+    $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
+    $('vrChat').onclick = () => showVoiceRoom(false);
+    $('vcDock').addEventListener('click', (e) => {
+      // Tapping the dock status area re-opens the full room view.
+      if (e.target.closest('.vc-status') && Voice.state().active) showVoiceRoom(true);
+    });
     $('vcMute').onclick = () => Voice.setMute();
     $('vcDeaf').onclick = () => Voice.setDeaf();
     $('vcCam').onclick = () => Voice.toggleCam();
     $('vcShare').onclick = () => Voice.toggleShare();
-    $('vcLeave').onclick = async () => { await Voice.leave(); UI.toast('Left the voice channel.'); };
+    $('vcLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
     window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });
   }
 
