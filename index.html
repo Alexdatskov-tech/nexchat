@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>NexChat — Sign in</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="assets/css/theme.css" />
 <style>
@@ -31,10 +32,7 @@
   .brand-mark {
     width: 40px; height: 40px;
     border-radius: 12px;
-    background: linear-gradient(135deg, var(--cyan), var(--violet));
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: var(--elev-glow-cyan);
-    color: #06121a; font-size: 1.1rem;
+    filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.35));
   }
   .brand h1 { font-size: 1.4rem; font-weight: 800; }
   .tabs {
@@ -86,7 +84,7 @@
   <div class="auth-wrap">
     <div class="glass-panel auth-card">
       <div class="brand">
-        <div class="brand-mark"><i class="fa-solid fa-hexagon-nodes"></i></div>
+        <img src="assets/img/logo.svg" alt="" class="brand-mark" width="40" height="40" />
         <h1 class="display">NexChat</h1>
       </div>
 

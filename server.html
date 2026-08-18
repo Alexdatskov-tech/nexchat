@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NexChat — Server</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css" />
+<style>
+  .wrap { position: relative; z-index: 1; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .card { max-width: 480px; width: 100%; padding: 0; overflow: hidden; }
+  .banner { height: 120px; background-size: cover; background-position: center; }
+  .content { padding: 1.6rem; text-align: center; }
+  .icon-wrap { width: 72px; height: 72px; border-radius: 20px; border: 4px solid var(--bg-elevated); margin: -50px auto 0.8rem; overflow: hidden; background: var(--bg-elevated); position: relative; z-index: 1; }
+  .icon-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  .icon-wrap .avatar-circle { width: 100%; height: 100%; border-radius: 16px; font-size: 1.6rem; }
+  .invite-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .invite-row input { flex: 1; }
+  .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; margin-top: 1.4rem; }
+  .back-link:hover { color: var(--cyan); }
+</style>
+</head>
+<body>
+  <div class="orb-field"><div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div></div>
+
+  <div class="wrap">
+    <div>
+      <div class="glass-panel card">
+        <div class="banner" id="banner"></div>
+        <div class="content">
+          <div class="icon-wrap" id="iconWrap"></div>
+          <h2 class="display" id="serverName">Loading…</h2>
+          <p style="color:var(--text-secondary); font-size:0.9rem; margin-top:0.3rem;" id="serverDesc"></p>
+          <p style="color:var(--text-muted); font-size:0.8rem; margin-top:0.6rem;" id="memberCount"></p>
+
+          <div style="margin-top:1.6rem; padding-top:1.4rem; border-top:1px solid var(--glass-border);">
+            <p style="font-size:0.85rem; color:var(--text-secondary);">
+              You're in. Channels, messages, and voice are the next phase — this page just proves create/join/permissions all work end to end.
+            </p>
+          </div>
+
+          <div id="ownerTools" class="hidden" style="margin-top:1.2rem; text-align:left;">
+            <label style="font-size:0.78rem; font-weight:600; color:var(--text-secondary);">Invite link</label>
+            <div class="invite-row">
+              <input id="inviteLink" type="text" readonly class="mono" />
+              <button class="btn btn-ghost" id="btnMakeInvite"><i class="fa-solid fa-link"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="text-align:center;">
+        <a href="portal.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> Back to your servers</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/supabase-client.js"></script>
+  <script>
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.toggle('error', !!isError);
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    (async () => {
+      const { data: sessionData } = await window.db.auth.getSession();
+      if (!sessionData.session) { window.location.href = 'index.html'; return; }
+      const uid = sessionData.session.user.id;
+
+      const params = new URLSearchParams(window.location.search);
+      const serverId = params.get('id');
+      if (!serverId) { window.location.href = 'portal.html'; return; }
+
+      const { data: server, error } = await window.db
+        .from('servers')
+        .select('*, server_members(count)')
+        .eq('id', serverId)
+        .single();
+
+      if (error || !server) {
+        document.getElementById('serverName').textContent = 'Not found';
+        document.getElementById('serverDesc').textContent = 'This server doesn\u2019t exist or you don\u2019t have access to it.';
+        return;
+      }
+
+      document.getElementById('serverName').textContent = server.name;
+      document.getElementById('serverDesc').textContent = server.description || '';
+      const count = server.server_members?.[0]?.count ?? 0;
+      document.getElementById('memberCount').innerHTML = `<i class="fa-solid fa-users"></i> ${count} member${count === 1 ? '' : 's'}`;
+
+      document.getElementById('banner').style.background = server.banner_url
+        ? `url('${server.banner_url}') center/cover`
+        : 'linear-gradient(135deg, var(--cyan), var(--violet))';
+
+      document.getElementById('iconWrap').innerHTML = server.icon_url
+        ? `<img src="${server.icon_url}" alt="" />`
+        : `<div class="avatar-circle">${(server.name || '?').charAt(0).toUpperCase()}</div>`;
+
+      if (server.owner_id === uid) {
+        document.getElementById('ownerTools').classList.remove('hidden');
+      }
+
+      document.getElementById('btnMakeInvite').addEventListener('click', async () => {
+        const { data: invite, error: invErr } = await window.db
+          .from('invites')
+          .insert({ server_id: serverId, created_by: uid })
+          .select()
+          .single();
+        if (invErr) { showToast('Could not create invite: ' + invErr.message, true); return; }
+        document.getElementById('inviteLink').value = invite.code;
+        showToast('Invite code generated — share it from the box above.');
+      });
+    })();
+  </script>
+</body>
+</html>
