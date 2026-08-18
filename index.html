@@ -97,8 +97,8 @@
 
       <form id="formSignIn">
         <div class="field">
-          <label for="siEmail">Email</label>
-          <input id="siEmail" type="email" required autocomplete="email" placeholder="you@example.com" />
+          <label for="siUsername">Username</label>
+          <input id="siUsername" type="text" required autocomplete="username" placeholder="e.g. alexander" />
         </div>
         <div class="field">
           <label for="siPassword">Password</label>
@@ -113,17 +113,18 @@
       <form id="formSignUp" class="hidden">
         <div class="field">
           <label for="suUsername">Username</label>
-          <input id="suUsername" type="text" required placeholder="e.g. alexander" maxlength="32" />
-          <p class="hint">This is how people find and @mention you.</p>
+          <input id="suUsername" type="text" required autocomplete="username" placeholder="e.g. alexander" maxlength="32" />
+          <p class="hint">This is how people find and @mention you — and how you sign in. No email needed.</p>
           <p class="error" id="errUsername"></p>
-        </div>
-        <div class="field">
-          <label for="suEmail">Email</label>
-          <input id="suEmail" type="email" required autocomplete="email" placeholder="you@example.com" />
         </div>
         <div class="field">
           <label for="suPassword">Password</label>
           <input id="suPassword" type="password" required autocomplete="new-password" placeholder="At least 8 characters" />
+        </div>
+        <div class="field">
+          <label for="suPasswordConfirm">Confirm password</label>
+          <input id="suPasswordConfirm" type="password" required autocomplete="new-password" placeholder="Type it again" />
+          <p class="hint">There's no email recovery — a mistyped password here means it's gone for good, so double check it.</p>
         </div>
         <p class="error" id="errSignUp"></p>
         <div class="submit-row">
