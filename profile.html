@@ -89,6 +89,25 @@
       <h2>Appearance</h2>
       <div class="sub">Your accent colour follows you across servers.</div>
       <div class="set-block">
+        <h4>Dashboard background</h4>
+        <div class="bsub">Shows behind your server cards. Pick a preset or paste any image URL.</div>
+        <div class="bg-presets" id="bgPresets"></div>
+        <div class="field" style="margin-top:14px;">
+          <label for="fBgUrl">Custom image URL</label>
+          <input id="fBgUrl" type="text" placeholder="https://…/wallpaper.jpg" />
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Darken</label>
+          <div class="range-row"><input type="range" id="fBgDim" min="0" max="95" value="62"><span id="bgDimV">62%</span></div>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Blur</label>
+          <div class="range-row"><input type="range" id="fBgBlur" min="0" max="24" value="0"><span id="bgBlurV">0px</span></div>
+        </div>
+        <button class="btn btn-quiet btn-sm" id="bgClear" style="margin-top:14px;">Remove background</button>
+      </div>
+
+      <div class="set-block">
         <h4>Accent colour</h4>
         <div class="bsub">Used for your avatar fallback and name highlight.</div>
         <div class="swatches" id="swatches"></div>
@@ -183,6 +202,7 @@
 <script src="assets/js/config.js"></script>
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/ui.js"></script>
+<script src="assets/js/md.js"></script>
 <script src="assets/js/profile.js"></script>
 </body>
 </html>

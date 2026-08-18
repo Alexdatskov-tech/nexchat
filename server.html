@@ -42,6 +42,20 @@
 
     <div class="chan-list" id="chanList"></div>
 
+    <div class="vc-dock hidden" id="vcDock">
+      <div class="vc-status">
+        <span class="vc-dot"></span>
+        <div class="vc-meta"><b id="vcName">Voice</b><small id="vcCount"></small></div>
+      </div>
+      <div class="vc-btns">
+        <button id="vcMute" title="Mute"><i class="fa-solid fa-microphone"></i></button>
+        <button id="vcDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
+        <button id="vcCam" title="Camera"><i class="fa-solid fa-video"></i></button>
+        <button id="vcShare" title="Share screen"><i class="fa-solid fa-display"></i></button>
+        <button id="vcLeave" class="danger" title="Disconnect"><i class="fa-solid fa-phone-slash"></i></button>
+      </div>
+    </div>
+
     <div class="rail-foot">
       <a class="me" href="profile.html">
         <span id="meAv"></span>
@@ -59,19 +73,26 @@
       <span class="topic hidden" id="chTopic"></span>
     </header>
 
+    <div class="stage hidden" id="stage"><div class="stage-grid" id="stageGrid"></div></div>
+
     <div class="msgs" id="msgs"></div>
 
     <div class="composer hidden" id="composer">
+      <div class="upbar hidden" id="upbar"><i style="width:0"></i></div>
+      <div class="tray hidden" id="tray"></div>
       <div class="composer-inner">
+        <button class="attach-btn" id="attachBtn" title="Attach files"><i class="fa-solid fa-paperclip"></i></button>
         <textarea id="input" rows="1" placeholder="Message"></textarea>
-        <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up" style="font-size:12px;"></i></button>
+        <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up"></i></button>
       </div>
+      <input type="file" id="fileIn" multiple class="hidden" />
       <div class="composer-hint">
         <span><kbd>Enter</kbd> send</span>
-        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
-        <span><kbd>**bold**</kbd> <kbd>`code`</kbd> <kbd>||spoiler||</kbd></span>
+        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> newline</span>
+        <span><kbd>**b**</kbd> <kbd>`code`</kbd> <kbd>||spoiler||</kbd> <kbd># head</kbd></span>
       </div>
     </div>
+
   </main>
 </div>
 
@@ -137,6 +158,10 @@
 <script src="assets/js/config.js"></script>
 <script src="assets/js/supabase-client.js"></script>
 <script src="assets/js/ui.js"></script>
+<script src="assets/js/md.js"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js"></script>
+<script src="assets/js/viewer.js"></script>
+<script src="assets/js/voice.js"></script>
 <script src="assets/js/server.js"></script>
 </body>
 </html>

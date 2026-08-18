@@ -4,6 +4,32 @@
   let clearAvatar = false, clearBanner = false;
 
   const PRESETS = ['#2FBF87', '#3B9EF5', '#8B7CF6', '#E8659A', '#E8B04B', '#E5484D', '#5AC8D8', '#94A3B8'];
+  const BG_PRESETS = [
+    { n: 'None',    v: '' },
+    { n: 'Aurora',  v: 'linear-gradient(135deg,#0B3B2E,#0C2436 55%,#211B3D)' },
+    { n: 'Ember',   v: 'linear-gradient(135deg,#3A1D14,#2A1520 60%,#161018)' },
+    { n: 'Deep',    v: 'linear-gradient(135deg,#0A1A2F,#0B1220 60%,#0A0A12)' },
+    { n: 'Moss',    v: 'linear-gradient(135deg,#16281B,#101E23 60%,#0D1014)' },
+    { n: 'Dusk',    v: 'radial-gradient(120% 100% at 20% 0%,#2B2246,#141222 55%,#0B0A11)' },
+  ];
+  let bgVal = '', bgDim = 62, bgBlur = 0;
+
+  function applyBg() {
+    if (!bgVal) { document.body.classList.remove('has-bg'); return; }
+    document.body.classList.add('has-bg');
+    document.documentElement.style.setProperty('--dash-bg', bgVal);
+    document.documentElement.style.setProperty('--dash-dim', bgDim / 100);
+    document.documentElement.style.setProperty('--dash-blur', bgBlur + 'px');
+    if (!document.querySelector('.dash-veil')) {
+      const v = document.createElement('div'); v.className = 'dash-veil'; document.body.appendChild(v);
+    }
+  }
+  function paintBgUI() {
+    document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));
+    $('fBgDim').value = bgDim; $('bgDimV').textContent = bgDim + '%';
+    $('fBgBlur').value = bgBlur; $('bgBlurV').textContent = bgBlur + 'px';
+    applyBg();
+  }
 
   // ---- tabs ----
   document.querySelectorAll('.set-nav button[data-tab]').forEach((b) => {
@@ -57,6 +83,20 @@
     document.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('on', s.dataset.c.toLowerCase() === hex.toLowerCase()));
     paint();
   }
+  $('bgPresets').innerHTML = BG_PRESETS.map((b) =>
+    `<div class="bg-preset" data-v="${b.v}" style="background:${b.v || 'var(--bg-2)'}"><span>${b.n}</span></div>`).join('');
+  document.querySelectorAll('.bg-preset').forEach((el) => {
+    el.onclick = () => { bgVal = el.dataset.v; $('fBgUrl').value = ''; paintBgUI(); };
+  });
+  $('fBgUrl').oninput = (e) => {
+    const u = e.target.value.trim();
+    bgVal = u ? `url('${u.replace(/'/g, "%27")}')` : '';
+    paintBgUI();
+  };
+  $('fBgDim').oninput = (e) => { bgDim = +e.target.value; paintBgUI(); };
+  $('fBgBlur').oninput = (e) => { bgBlur = +e.target.value; paintBgUI(); };
+  $('bgClear').onclick = () => { bgVal = ''; $('fBgUrl').value = ''; paintBgUI(); };
+
   $('swatches').innerHTML = PRESETS.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}" title="${c}"></div>`).join('');
   document.querySelectorAll('.swatch').forEach((s) => { s.onclick = () => setAccent(s.dataset.c); });
   $('fAccent').oninput = (e) => setAccent(e.target.value);
@@ -101,6 +141,7 @@
         bio: $('fBio').value.trim() || null,
         custom_status: $('fStatus').value.trim() || null,
         accent_color: $('fAccent').value,
+        theme: { ...(me.theme || {}), dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur },
       };
       if (me.is_nitro) patch.banner_gif_url = $('fHalo').value.trim() || null;
 
@@ -183,6 +224,10 @@
     $('fBio').value = me.bio || '';
     $('fStatus').value = me.custom_status || '';
     setAccent(me.accent_color || '#2FBF87');
+    const th = me.theme || {};
+    bgVal = th.dash_bg || ''; bgDim = th.dash_dim ?? 62; bgBlur = th.dash_blur ?? 0;
+    if (bgVal.startsWith('url(')) $('fBgUrl').value = bgVal.slice(5, -2);
+    paintBgUI();
     avatarFile = bannerFile = null; clearAvatar = clearBanner = false;
     $('fAvatar').value = ''; $('fBanner').value = '';
     $('avPrev').innerHTML = me.avatar_url ? `<img src="${UI.esc(me.avatar_url)}" alt="">` : '<i class="fa-regular fa-user"></i>';

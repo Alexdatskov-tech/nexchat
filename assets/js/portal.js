@@ -9,7 +9,23 @@
     let h = 0;
     for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
     const a = HUES[h % HUES.length], b = HUES[(h >> 4) % HUES.length];
-    return `linear-gradient(120deg, hsl(${a} 42% 26%), hsl(${b} 38% 17%))`;
+    // Tinted default artwork, hue-shifted per server so no two look identical.
+    return `linear-gradient(120deg, hsl(${a} 42% 26%), hsl(${b} 38% 17%)), url('assets/img/default-banner.svg')`;
+  }
+
+  // Applies the saved dashboard background from profiles.theme.
+  function applyDashboardBg(theme) {
+    const t = theme || {};
+    if (!t.dash_bg) { document.body.classList.remove('has-bg'); return; }
+    document.body.classList.add('has-bg');
+    document.documentElement.style.setProperty('--dash-bg', t.dash_bg);
+    document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 62) / 100);
+    document.documentElement.style.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
+    if (!document.querySelector('.dash-veil')) {
+      const v = document.createElement('div');
+      v.className = 'dash-veil';
+      document.body.appendChild(v);
+    }
   }
 
   function card(s) {
@@ -19,7 +35,7 @@
     const ico = s.icon_url ? `<img src="${UI.esc(s.icon_url)}" alt="">` : UI.initial(s.name);
     return `
       <button class="scard" data-id="${s.id}">
-        <div class="scard-banner" style="${bg}"></div>
+        <div class="scard-banner" style="${bg};background-size:cover;background-blend-mode:multiply;"></div>
         <div class="scard-ico">${ico}</div>
         <div class="scard-body">
           <div class="scard-name">
@@ -133,6 +149,7 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) { UI.toast('Profile missing — try signing out and back in.', true); return; }
+    applyDashboardBg(me.theme);
     $('meAv').innerHTML = UI.avatar(me, 24);
     $('meName').textContent = me.display_name || me.username;
     if (me.is_platform_admin) $('adminLink').style.display = '';
