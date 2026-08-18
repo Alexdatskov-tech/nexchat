@@ -393,7 +393,14 @@ main.portal-main {
 /* ============================================================================
    SERVER VIEW (channel sidebar + chat)
    ============================================================================ */
-.server-shell { display: flex; height: 100vh; position: relative; z-index: 1; }
+.server-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
 
 .channel-rail {
   width: 260px; flex-shrink: 0; border-radius: 0;
@@ -522,14 +529,18 @@ main.portal-main {
 }
 .edit-box .hint { font-size: 0.7rem; color: var(--text-muted); }
 
-.composer { flex-shrink: 0; padding: 0.85rem 1.1rem 1.1rem; display: flex; align-items: flex-end; gap: 0.6rem; }
+.composer {
+  flex-shrink: 0;
+  padding: 0.85rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom));
+  display: flex; align-items: flex-end; gap: 0.6rem;
+}
 .composer textarea {
-  flex: 1; resize: none; max-height: 160px; background: rgba(0,0,0,0.25);
+  flex: 1; min-width: 0; resize: none; max-height: 160px; background: rgba(0,0,0,0.25);
   border: 1px solid var(--glass-border); border-radius: 12px; padding: 0.7rem 0.9rem;
   color: var(--text-primary); font-family: var(--font-body); font-size: 0.89rem; line-height: 1.4;
 }
 .composer textarea:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(34,211,238,0.12); }
-.composer .btn { padding: 0.72rem 0.95rem; }
+.composer .btn { padding: 0.72rem 0.95rem; flex-shrink: 0; }
 
 .channel-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.85rem; }
 

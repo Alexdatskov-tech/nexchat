@@ -170,7 +170,7 @@
 
     const { data: msgs, error } = await window.db
       .from('messages')
-      .select('*, profiles(username, display_name, avatar_url)')
+      .select('*, profiles!author_id(username, display_name, avatar_url)')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: true })
       .limit(80);
