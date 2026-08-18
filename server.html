@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=8" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=9" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=8" />
+<link rel="stylesheet" href="assets/css/theme.css?v=9" />
 </head>
 <body>
 
@@ -119,13 +119,8 @@
   <div class="modal" style="max-width:400px;">
     <div class="modal-head"><h3>Invite people</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:13.5px;color:var(--txt-2);margin:0;">Anyone with this link can join.</p>
-      <div class="copyrow">
-        <input id="invOut" class="input mono" readonly placeholder="Generate a link…" />
-        <button class="btn btn-ghost btn-icon" id="invCopy" title="Copy"><i class="fa-regular fa-copy"></i></button>
-      </div>
       <div class="field">
-        <label for="invExpiry">Expires</label>
+        <label for="invExpiry">Expires after</label>
         <select id="invExpiry" class="input">
           <option value="0">Never</option>
           <option value="1">1 hour</option>
@@ -133,12 +128,29 @@
           <option value="168">7 days</option>
         </select>
       </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-primary" id="invGo">Generate link</button>
+      <button class="btn btn-primary" id="invGo" style="width:100%;">Generate invite code</button>
+
+      <div class="hidden" id="invResult">
+        <div class="field">
+          <label>Invite code</label>
+          <div class="copyrow">
+            <input id="invCode" class="input mono invite-code" readonly />
+            <button class="btn btn-ghost btn-icon" id="invCopyCode" title="Copy code"><i class="fa-regular fa-copy"></i></button>
+          </div>
+          <span class="hint">Share this code. They paste it into "Join" on their servers page.</span>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Or send a link</label>
+          <div class="copyrow">
+            <input id="invOut" class="input mono" readonly style="font-size:11.5px;" />
+            <button class="btn btn-ghost btn-icon" id="invCopy" title="Copy link"><i class="fa-solid fa-link"></i></button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
+
 
 <!-- Create channel -->
 <div class="overlay hidden" id="mChan">
@@ -173,13 +185,13 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=8"></script>
-<script src="assets/js/supabase-client.js?v=8"></script>
-<script src="assets/js/ui.js?v=8"></script>
-<script src="assets/js/md.js?v=8"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=8"></script>
-<script src="assets/js/viewer.js?v=8"></script>
-<script src="assets/js/voice.js?v=8"></script>
-<script src="assets/js/server.js?v=8"></script>
+<script src="assets/js/config.js?v=9"></script>
+<script src="assets/js/supabase-client.js?v=9"></script>
+<script src="assets/js/ui.js?v=9"></script>
+<script src="assets/js/md.js?v=9"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=9"></script>
+<script src="assets/js/viewer.js?v=9"></script>
+<script src="assets/js/voice.js?v=9"></script>
+<script src="assets/js/server.js?v=9"></script>
 </body>
 </html>

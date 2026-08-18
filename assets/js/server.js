@@ -573,14 +573,26 @@
 
     const mInv = modal('mInvite'), mCh = modal('mChan');
 
-    $('miInvite').onclick = () => { menu.classList.add('hidden'); $('invOut').value = ''; mInv.classList.remove('hidden'); };
+    $('miInvite').onclick = () => {
+      menu.classList.add('hidden');
+      $('invResult').classList.add('hidden');
+      $('invCode').value = ''; $('invOut').value = '';
+      mInv.classList.remove('hidden');
+    };
     $('invGo').onclick = async () => {
       const hrs = +$('invExpiry').value;
       const rowIn = { server_id: serverId, created_by: me.id };
       if (hrs) rowIn.expires_at = new Date(Date.now() + hrs * 3600e3).toISOString();
       const { data, error } = await window.db.from('invites').insert(rowIn).select().single();
       if (error) return UI.toast(error.message, true);
+      $('invCode').value = data.code;
       $('invOut').value = `${location.origin}${location.pathname.replace(/server\.html$/, 'portal.html')}?invite=${data.code}`;
+      $('invResult').classList.remove('hidden');
+      $('invCode').select();
+    };
+    $('invCopyCode').onclick = () => {
+      const v = $('invCode').value; if (!v) return;
+      navigator.clipboard.writeText(v).then(() => UI.toast('Invite code copied.'));
     };
     $('invCopy').onclick = () => {
       const v = $('invOut').value; if (!v) return;
