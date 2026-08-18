@@ -39,8 +39,12 @@
   // derives an invisible placeholder address from the username — never
   // displayed, never emailed (email confirmation must stay OFF in the
   // Supabase dashboard, since this address can't receive anything real).
+  // IMPORTANT: the domain must end in a real, IANA-registered TLD
+  // (.com, .dev, etc.) — Supabase's validator rejects made-up TLDs like
+  // .internal/.local/.test outright, even though nothing here ever
+  // actually needs to send or receive mail at this address.
   function usernameToPlaceholderEmail(username) {
-    return `${username.trim().toLowerCase()}@users.nexchat.internal`;
+    return `${username.trim().toLowerCase()}@users.nexchat-app.com`;
   }
 
   // ---- Sign up ------------------------------------------------------------
