@@ -3,78 +3,140 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>NexChat — Server</title>
+<title>NexChat</title>
 <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="assets/css/theme.css" />
 </head>
 <body>
 
-  <div id="notFoundState" class="hidden" style="min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:1.5rem;">
-    <div class="glass-panel" style="max-width:380px; padding:2rem; text-align:center;">
-      <i class="fa-solid fa-triangle-exclamation" style="font-size:1.6rem; color:var(--warning); margin-bottom:0.8rem;"></i>
-      <h3 class="display">Can't open this server</h3>
-      <p style="color:var(--text-secondary); font-size:0.86rem; margin-top:0.4rem;">It doesn't exist, or you're not a member.</p>
-      <a href="portal.html" class="btn btn-primary" style="margin-top:1.2rem; width:100%;">Back to your servers</a>
+<div class="hidden" id="gone" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
+  <div class="surface" style="max-width:360px;">
+    <div class="empty">
+      <div class="ico"><i class="fa-solid fa-lock"></i></div>
+      <h3>Can't open this server</h3>
+      <p>It doesn't exist, or you're not a member of it.</p>
+      <a href="portal.html" class="btn btn-primary" style="margin-top:16px;">Back to your servers</a>
     </div>
   </div>
+</div>
 
-  <div id="appShell" class="server-shell hidden">
-    <aside class="channel-rail glass-panel" id="channelRail">
-      <div class="server-head">
-        <a href="portal.html" class="back-btn" title="Back to servers"><i class="fa-solid fa-arrow-left"></i></a>
-        <div class="server-title">
-          <div class="server-name" id="serverNameLabel">Loading…</div>
-          <div class="server-sub" id="memberCountLabel"></div>
-        </div>
-        <button id="btnServerMenu" title="Server options"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-        <div class="server-menu hidden" id="serverMenu">
-          <button id="menuInvite"><i class="fa-solid fa-user-plus"></i> Invite people</button>
-          <button id="menuSettings"><i class="fa-solid fa-gear"></i> Server settings</button>
-        </div>
+<div class="shell hidden" id="shell">
+  <aside class="rail" id="rail">
+    <div class="rail-head">
+      <a class="home" href="portal.html" title="All servers"><i class="fa-solid fa-arrow-left"></i></a>
+      <div class="meta">
+        <b id="srvName">…</b>
+        <small id="srvMembers"></small>
       </div>
-      <div class="channel-list" id="channelList"></div>
-    </aside>
-
-    <main class="chat-main">
-      <header class="chat-header">
-        <button id="btnMobileChannels" class="btn btn-ghost" style="display:none; padding:0.4rem 0.6rem;"><i class="fa-solid fa-bars"></i></button>
-        <span class="channel-icon" id="channelIcon"><i class="fa-solid fa-hashtag"></i></span>
-        <span class="channel-name-label" id="channelNameLabel">general</span>
-        <span class="channel-topic hidden" id="channelTopicLabel"></span>
-      </header>
-
-      <div class="message-list" id="messageList"></div>
-      <div class="channel-empty hidden" id="channelEmptyState">Pick a text channel to start chatting.</div>
-
-      <div class="composer hidden" id="composer">
-        <textarea id="composerInput" placeholder="Message" rows="1"></textarea>
-        <button class="btn btn-primary" id="btnSend"><i class="fa-solid fa-paper-plane"></i></button>
+      <button class="btn btn-quiet btn-icon" id="srvMenuBtn"><i class="fa-solid fa-chevron-down" style="font-size:11px;"></i></button>
+      <div class="popover hidden" id="srvMenu">
+        <button id="miInvite"><i class="fa-solid fa-user-plus"></i> Invite people</button>
+        <button id="miChannel"><i class="fa-solid fa-plus"></i> Create channel</button>
+        <div class="sep"></div>
+        <button id="miSettings"><i class="fa-solid fa-sliders"></i> Server settings</button>
+        <div class="sep"></div>
+        <button id="miLeave" style="color:#FF8085;"><i class="fa-solid fa-right-from-bracket"></i> Leave server</button>
       </div>
-    </main>
-  </div>
+    </div>
 
-  <!-- Invite modal -->
-  <div class="modal-overlay hidden" id="inviteModal">
-    <div class="glass-panel modal-box">
-      <div class="modal-head">
-        <h3 class="display">Invite people</h3>
-        <button id="closeInviteModal"><i class="fa-solid fa-xmark"></i></button>
+    <div class="chan-list" id="chanList"></div>
+
+    <div class="rail-foot">
+      <a class="me" href="profile.html">
+        <span id="meAv"></span>
+        <span class="nm"><b id="meName">…</b><small id="meHandle"></small></span>
+      </a>
+      <button class="btn btn-quiet btn-icon" id="btnOut" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-head">
+      <button class="btn btn-quiet btn-icon m-burger" id="burger" style="display:none;"><i class="fa-solid fa-bars"></i></button>
+      <span class="hico" id="chIco"><i class="fa-solid fa-hashtag"></i></span>
+      <b id="chName">—</b>
+      <span class="topic hidden" id="chTopic"></span>
+    </header>
+
+    <div class="msgs" id="msgs"></div>
+
+    <div class="composer hidden" id="composer">
+      <div class="composer-inner">
+        <textarea id="input" rows="1" placeholder="Message"></textarea>
+        <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up" style="font-size:12px;"></i></button>
       </div>
-      <p style="font-size:0.85rem; color:var(--text-secondary);">Generate a code and share it — anyone with it can join.</p>
-      <div class="invite-row" style="display:flex; gap:0.5rem;">
-        <input id="inviteCodeOutput" type="text" readonly class="mono" placeholder="Click generate…" style="flex:1; background:rgba(0,0,0,0.25); border:1px solid var(--glass-border); border-radius:10px; padding:0.7rem 0.9rem; color:var(--text-primary);" />
-        <button class="btn btn-ghost" id="btnCopyInvite" title="Copy"><i class="fa-regular fa-copy"></i></button>
+      <div class="composer-hint">
+        <span><kbd>Enter</kbd> send</span>
+        <span><kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span>
+        <span><kbd>**bold**</kbd> <kbd>`code`</kbd> <kbd>||spoiler||</kbd></span>
       </div>
-      <button class="btn btn-primary" id="btnGenerateInvite" style="width:100%;">Generate new code</button>
+    </div>
+  </main>
+</div>
+
+<!-- Invite -->
+<div class="overlay hidden" id="mInvite">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head"><h3>Invite people</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13.5px;color:var(--txt-2);margin:0;">Anyone with this link can join.</p>
+      <div class="copyrow">
+        <input id="invOut" class="input mono" readonly placeholder="Generate a link…" />
+        <button class="btn btn-ghost btn-icon" id="invCopy" title="Copy"><i class="fa-regular fa-copy"></i></button>
+      </div>
+      <div class="field">
+        <label for="invExpiry">Expires</label>
+        <select id="invExpiry" class="input">
+          <option value="0">Never</option>
+          <option value="1">1 hour</option>
+          <option value="24">1 day</option>
+          <option value="168">7 days</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-primary" id="invGo">Generate link</button>
     </div>
   </div>
+</div>
 
-  <div class="toast" id="toast"></div>
+<!-- Create channel -->
+<div class="overlay hidden" id="mChan">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head"><h3>Create channel</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="chNameIn">Channel name</label>
+        <input id="chNameIn" type="text" maxlength="100" placeholder="🔥 general" />
+        <span class="hint">Emoji are fine.</span>
+      </div>
+      <div class="field">
+        <label for="chType">Type</label>
+        <select id="chType" class="input">
+          <option value="text">Text</option>
+          <option value="announcement">Announcement</option>
+          <option value="voice">Voice</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="chParent">Category</label>
+        <select id="chParent" class="input"></select>
+      </div>
+      <p class="err" id="chErr"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-quiet" data-close>Cancel</button>
+      <button class="btn btn-primary" id="chGo">Create</button>
+    </div>
+  </div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js"></script>
-  <script src="assets/js/supabase-client.js"></script>
-  <script src="assets/js/server.js"></script>
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/server.js"></script>
 </body>
 </html>

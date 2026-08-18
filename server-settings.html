@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>NexChat — Server settings</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css" />
+</head>
+<body>
+<div class="set-wrap">
+  <nav class="set-nav">
+    <a class="back" id="backLink" href="#"><i class="fa-solid fa-arrow-left"></i> <span>Back to server</span></a>
+    <div class="grp-label" id="navTitle">Server</div>
+    <button class="on" data-tab="overview"><i class="fa-solid fa-sliders"></i> Overview</button>
+    <button data-tab="appearance"><i class="fa-solid fa-palette"></i> Appearance</button>
+    <button data-tab="channels"><i class="fa-solid fa-hashtag"></i> Channels</button>
+    <button data-tab="roles"><i class="fa-solid fa-shield"></i> Roles</button>
+    <button data-tab="members"><i class="fa-solid fa-user-group"></i> Members</button>
+    <button data-tab="invites"><i class="fa-solid fa-link"></i> Invites</button>
+    <button data-tab="bans"><i class="fa-solid fa-ban"></i> Bans</button>
+    <button data-tab="danger" style="color:#FF8085;"><i class="fa-solid fa-triangle-exclamation"></i> Danger zone</button>
+  </nav>
+
+  <div class="set-main">
+    <section class="set-inner" data-pane="overview">
+      <h2>Overview</h2>
+      <div class="sub">Name, description and imagery.</div>
+      <div class="set-block">
+        <div class="set-rows">
+          <div class="field"><label for="sName">Server name</label><input id="sName" type="text" maxlength="100" /></div>
+          <div class="field"><label for="sDesc">Description</label><textarea id="sDesc" rows="2" maxlength="300"></textarea></div>
+        </div>
+      </div>
+      <div class="set-block">
+        <h4>Icon</h4><div class="bsub">Square, under 2 MB.</div>
+        <div class="upload-row">
+          <div class="upload-prev" id="icoPrev"><i class="fa-regular fa-image"></i></div>
+          <input type="file" id="sIcon" accept="image/*" />
+        </div>
+      </div>
+      <div class="set-block">
+        <h4>Banner</h4><div class="bsub">Wide, under 4 MB. Shows on the server card.</div>
+        <div class="upload-row">
+          <div class="upload-prev wide" id="banPrev"><i class="fa-regular fa-image"></i></div>
+          <input type="file" id="sBanner" accept="image/*" />
+        </div>
+      </div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="appearance">
+      <h2>Appearance</h2>
+      <div class="sub">Set the accent everyone sees inside this server.</div>
+      <div class="set-block">
+        <h4>Accent colour</h4>
+        <div class="bsub">Applies to active channels, buttons and highlights here.</div>
+        <div class="swatches" id="sSwatches"></div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:16px;">
+          <input type="color" id="sAccent" />
+          <input type="text" id="sAccentHex" class="input mono" style="max-width:130px;" maxlength="7" />
+          <button class="btn btn-quiet btn-sm" id="sAccentReset">Reset to default</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="channels">
+      <h2>Channels</h2>
+      <div class="sub">Rename, retopic, reorder or remove.</div>
+      <button class="btn btn-primary btn-sm" id="addCat" style="margin-bottom:16px;"><i class="fa-solid fa-plus"></i> New category</button>
+      <div id="chanRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="roles">
+      <h2>Roles</h2>
+      <div class="sub">Permissions apply to everyone holding the role.</div>
+      <button class="btn btn-primary btn-sm" id="addRole" style="margin-bottom:16px;"><i class="fa-solid fa-plus"></i> New role</button>
+      <div id="roleRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="members">
+      <h2>Members</h2>
+      <div class="sub">Assign roles, kick or ban.</div>
+      <input id="memSearch" class="input" placeholder="Search members" style="margin-bottom:16px;" />
+      <div id="memRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="invites">
+      <h2>Invites</h2>
+      <div class="sub">Active invite codes for this server.</div>
+      <div id="invRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="bans">
+      <h2>Bans</h2>
+      <div class="sub">Banned people can't rejoin, even with a valid invite.</div>
+      <div id="banRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="danger">
+      <h2>Danger zone</h2>
+      <div class="sub">These can't be undone.</div>
+      <div class="set-block" style="border-color:rgba(229,72,77,.3);">
+        <h4>Delete this server</h4>
+        <div class="bsub">Every channel, message and invite goes with it. Owner only.</div>
+        <button class="btn btn-danger" id="btnDelete">Delete server</button>
+      </div>
+    </section>
+
+    <div class="save-bar" id="saveBar">
+      <button class="btn btn-quiet" id="btnReset">Reset</button>
+      <button class="btn btn-primary" id="btnSave">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/server-settings.js"></script>
+</body>
+</html>

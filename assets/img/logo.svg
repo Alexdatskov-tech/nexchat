@@ -1,17 +1,11 @@
-<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="NexChat logo">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="NexChat">
   <defs>
-    <linearGradient id="ncGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#8b5cf6"/>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#43D69B"/>
+      <stop offset="1" stop-color="#1F9C6C"/>
     </linearGradient>
   </defs>
-  <polygon points="50,4 89.84,27 89.84,73 50,96 10.16,73 10.16,27" fill="url(#ncGrad)"/>
-  <g stroke="#0a0d13" stroke-width="3.4" stroke-linecap="round" opacity="0.92">
-    <line x1="50" y1="37" x2="35" y2="63"/>
-    <line x1="50" y1="37" x2="65" y2="63"/>
-    <line x1="35" y1="63" x2="65" y2="63"/>
-  </g>
-  <circle cx="50" cy="37" r="8" fill="#0a0d13"/>
-  <circle cx="35" cy="63" r="8" fill="#0a0d13"/>
-  <circle cx="65" cy="63" r="8" fill="#0a0d13"/>
+  <rect x="6" y="6" width="88" height="88" rx="26" fill="url(#g)"/>
+  <path d="M30 68V32l40 36V32" fill="none" stroke="#08130E" stroke-width="9.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

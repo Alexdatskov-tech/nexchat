@@ -1,470 +1,425 @@
 (function () {
-  const toast = document.getElementById('toast');
-  function showToast(msg, isError) {
-    toast.textContent = msg;
-    toast.classList.toggle('error', !!isError);
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3200);
+  const $ = (id) => document.getElementById(id);
+  let me = null, srv = null, serverId = null;
+  let channels = [], active = null, sub = null, canManage = false;
+  const profiles = {};       // user_id -> profile
+  const rx = {};             // message_id -> { emoji: {n, mine, users[]} }
+
+  const QUICK = ['👍', '🔥', '😂', '❤️', '😮', '🎉'];
+
+  /* ---- markdown: Discord's subset, escaped first so it can't inject HTML ---- */
+  function md(raw) {
+    let t = UI.esc(raw || '');
+    const blocks = [];
+    t = t.replace(/```(?:[a-z]*\n)?([\s\S]*?)```/gi, (_, c) => `\u0000${blocks.push(`<pre><code>${c.replace(/\n$/, '')}</code></pre>`) - 1}\u0000`);
+    t = t.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    t = t.replace(/\|\|([\s\S]+?)\|\|/g, '<span class="spoil">$1</span>');
+    t = t.replace(/\*\*\*([^\n*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    t = t.replace(/\*\*([^\n*]+)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/__([^\n_]+)__/g, '<u>$1</u>');
+    t = t.replace(/~~([^\n~]+)~~/g, '<del>$1</del>');
+    t = t.replace(/\*([^\n*]+)\*/g, '<em>$1</em>');
+    t = t.replace(/(^|\s)_([^\n_]+)_(?=\s|$)/g, '$1<em>$2</em>');
+    t = t.replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+    t = t.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    return t.replace(/\u0000(\d+)\u0000/g, (_, i) => blocks[+i]);
   }
 
-  function escapeHtml(str) {
-    return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-  function initials(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
-
-  // ---- Minimal, safe Discord-style markdown subset ---------------------------
-  function renderMarkdown(raw) {
-    let text = escapeHtml(raw || '');
-    text = text.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.trim()}</code></pre>`);
-    text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-    text = text.replace(/\*\*([^\*\n]+)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/__([^_\n]+)__/g, '<u>$1</u>');
-    text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-    text = text.replace(/\*([^\*\n]+)\*/g, '<em>$1</em>');
-    text = text.replace(/(^|[^\w])_([^_\n]+)_(?!\w)/g, '$1<em>$2</em>');
-    text = text.replace(/^&gt; ?(.*)$/gm, '<blockquote>$1</blockquote>');
-    text = text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-    return text;
+  async function profileOf(id) {
+    if (profiles[id]) return profiles[id];
+    const { data } = await window.db.from('profiles')
+      .select('id,username,display_name,avatar_url,accent_color,is_nitro').eq('id', id).single();
+    profiles[id] = data || { username: 'unknown', display_name: 'Unknown' };
+    return profiles[id];
   }
 
-  function timeLabel(iso) {
-    const d = new Date(iso);
-    const now = new Date();
-    const sameDay = d.toDateString() === now.toDateString();
-    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return sameDay ? `Today at ${time}` : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${time}`;
+  /* ================= channels ================= */
+  function chanIcon(t) {
+    return t === 'voice' ? 'fa-volume-high' : t === 'stage' ? 'fa-tower-broadcast'
+      : t === 'announcement' ? 'fa-bullhorn' : 'fa-hashtag';
   }
 
-  const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+  function renderChannels() {
+    const cats = channels.filter((c) => c.type === 'category').sort((a, b) => a.position - b.position);
+    const loose = channels.filter((c) => c.type !== 'category' && !c.parent_id).sort((a, b) => a.position - b.position);
 
-  let currentUserId = null;
-  let serverId = null;
-  let activeChannelId = null;
-  let activeChannelName = '';
-  let channels = [];
-  let msgChannel = null;      // current realtime channel subscription
-  let profileCache = {};      // user_id -> {username, display_name, avatar_url}
-  const messageReactions = {}; // message_id -> {emoji: {count, mine}}
-
-  async function requireSession() {
-    const { data } = await window.db.auth.getSession();
-    if (!data.session) { window.location.href = 'index.html'; return null; }
-    return data.session;
-  }
-
-  async function getProfile(userId) {
-    if (profileCache[userId]) return profileCache[userId];
-    const { data } = await window.db.from('profiles').select('username, display_name, avatar_url').eq('id', userId).single();
-    profileCache[userId] = data || { username: 'unknown', display_name: 'Unknown' };
-    return profileCache[userId];
-  }
-
-  // ---- Boot ------------------------------------------------------------------
-  (async () => {
-    const session = await requireSession();
-    if (!session) return;
-    currentUserId = session.user.id;
-
-    const params = new URLSearchParams(window.location.search);
-    serverId = params.get('id');
-    if (!serverId) { window.location.href = 'portal.html'; return; }
-
-    const { data: server, error } = await window.db
-      .from('servers')
-      .select('*, server_members(count)')
-      .eq('id', serverId)
-      .single();
-
-    if (error || !server) {
-      document.getElementById('notFoundState').classList.remove('hidden');
-      return;
-    }
-
-    document.getElementById('appShell').classList.remove('hidden');
-    document.getElementById('serverNameLabel').textContent = server.name;
-    const count = server.server_members?.[0]?.count ?? 0;
-    document.getElementById('memberCountLabel').textContent = `${count} member${count === 1 ? '' : 's'}`;
-
-    await loadChannels();
-    wireServerMenu();
-    wireComposer();
-    wireMobileToggle();
-  })();
-
-  // ---- Channels ----------------------------------------------------------------
-  async function loadChannels() {
-    const { data, error } = await window.db
-      .from('channels')
-      .select('*')
-      .eq('server_id', serverId)
-      .order('position', { ascending: true });
-
-    if (error) { showToast('Could not load channels: ' + error.message, true); return; }
-    channels = data;
-    renderChannelList();
-
-    const firstText = channels.find((c) => c.type === 'text' || c.type === 'announcement');
-    if (firstText) selectChannel(firstText);
-  }
-
-  function renderChannelList() {
-    const listEl = document.getElementById('channelList');
-    const categories = channels.filter((c) => c.type === 'category');
-    const orphans = channels.filter((c) => c.type !== 'category' && !c.parent_id);
-
-    let html = '';
-    const renderChannelItem = (c) => {
-      const icon = c.type === 'voice' || c.type === 'stage' ? 'fa-volume-high' : c.type === 'announcement' ? 'fa-bullhorn' : 'fa-hashtag';
-      const disabled = c.type === 'voice' || c.type === 'stage';
-      return `
-        <div class="channel-item ${disabled ? 'voice-disabled' : ''} ${c.id === activeChannelId ? 'active' : ''}" data-id="${c.id}" data-disabled="${disabled}">
-          <i class="fa-solid ${icon}"></i><span>${escapeHtml(c.name)}</span>
-        </div>`;
+    const item = (c) => {
+      const soon = c.type === 'voice' || c.type === 'stage';
+      return `<div class="chan ${soon ? 'soon' : ''} ${c.id === active?.id ? 'on' : ''}" data-id="${c.id}" data-soon="${soon}">
+        <i class="fa-solid ${chanIcon(c.type)}"></i><span>${UI.esc(c.name)}</span>
+      </div>`;
     };
 
-    categories.forEach((cat) => {
-      const children = channels.filter((c) => c.parent_id === cat.id).sort((a, b) => a.position - b.position);
-      html += `<div class="channel-category"><i class="fa-solid fa-chevron-down"></i> ${escapeHtml(cat.name)}</div>`;
-      html += `<div class="channel-group">${children.map(renderChannelItem).join('')}</div>`;
+    let html = loose.map(item).join('');
+    cats.forEach((cat) => {
+      const kids = channels.filter((c) => c.parent_id === cat.id).sort((a, b) => a.position - b.position);
+      html += `<div class="cat"><i class="fa-solid fa-chevron-down"></i>${UI.esc(cat.name)}</div>
+               <div class="cat-kids">${kids.map(item).join('')}</div>`;
     });
-    if (orphans.length) html += orphans.map(renderChannelItem).join('');
+    $('chanList').innerHTML = html || '<div style="padding:14px 8px;font-size:12.5px;color:var(--txt-3);">No channels yet.</div>';
 
-    listEl.innerHTML = html;
-
-    listEl.querySelectorAll('.channel-category').forEach((el) => {
-      el.addEventListener('click', () => el.classList.toggle('collapsed'));
-    });
-    listEl.querySelectorAll('.channel-item').forEach((el) => {
-      el.addEventListener('click', () => {
-        if (el.dataset.disabled === 'true') { showToast('Voice channels aren\u2019t built yet — text channels work fully.'); return; }
-        const ch = channels.find((c) => c.id === el.dataset.id);
-        if (ch) selectChannel(ch);
-        document.getElementById('channelRail').classList.remove('open');
-      });
+    $('chanList').querySelectorAll('.cat').forEach((el) => { el.onclick = () => el.classList.toggle('shut'); });
+    $('chanList').querySelectorAll('.chan').forEach((el) => {
+      el.onclick = () => {
+        if (el.dataset.soon === 'true') return UI.toast('Voice rooms aren\u2019t wired up yet.');
+        open(channels.find((c) => c.id === el.dataset.id));
+        $('rail').classList.remove('open');
+        document.querySelector('.rail-scrim')?.remove();
+      };
     });
   }
 
-  async function selectChannel(channel) {
-    activeChannelId = channel.id;
-    activeChannelName = channel.name;
-    renderChannelList();
-
-    document.getElementById('channelIcon').innerHTML = `<i class="fa-solid ${channel.type === 'announcement' ? 'fa-bullhorn' : 'fa-hashtag'}"></i>`;
-    document.getElementById('channelNameLabel').textContent = channel.name;
-    const topicEl = document.getElementById('channelTopicLabel');
-    if (channel.topic) { topicEl.textContent = channel.topic; topicEl.classList.remove('hidden'); }
-    else topicEl.classList.add('hidden');
-
-    document.getElementById('composerInput').placeholder = `Message #${channel.name}`;
-    document.getElementById('composer').classList.remove('hidden');
-    document.getElementById('channelEmptyState').classList.add('hidden');
-
-    await loadMessages(channel.id);
-    subscribeRealtime(channel.id);
+  async function loadChannels(selectId) {
+    const { data, error } = await window.db.from('channels').select('*').eq('server_id', serverId).order('position');
+    if (error) return UI.toast('Could not load channels.', true);
+    channels = data;
+    renderChannels();
+    const pick = (selectId && channels.find((c) => c.id === selectId))
+      || channels.find((c) => c.type === 'text' || c.type === 'announcement');
+    if (pick) open(pick);
+    else { $('composer').classList.add('hidden'); $('msgs').innerHTML = ''; }
   }
 
-  // ---- Messages -----------------------------------------------------------------
-  async function loadMessages(channelId) {
-    const listEl = document.getElementById('messageList');
-    listEl.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>`;
+  async function open(ch) {
+    if (!ch) return;
+    active = ch;
+    renderChannels();
+    $('chIco').innerHTML = `<i class="fa-solid ${chanIcon(ch.type)}"></i>`;
+    $('chName').textContent = ch.name;
+    $('chTopic').textContent = ch.topic || '';
+    $('chTopic').classList.toggle('hidden', !ch.topic);
+    $('input').placeholder = `Message #${ch.name}`;
+    $('composer').classList.remove('hidden');
+    await loadMessages(ch.id);
+    listen(ch.id);
+  }
 
-    const { data: msgs, error } = await window.db
-      .from('messages')
-      .select('*, profiles!author_id(username, display_name, avatar_url)')
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: true })
-      .limit(80);
+  /* ================= messages ================= */
+  function intro() {
+    return `<div class="msgs-top">
+      <div class="big-ico"><i class="fa-solid ${chanIcon(active.type)}"></i></div>
+      <h2>Welcome to #${UI.esc(active.name)}</h2>
+      <p>${active.topic ? UI.esc(active.topic) : 'This is the start of the channel.'}</p>
+    </div>`;
+  }
 
-    if (error) { listEl.innerHTML = ''; showToast('Could not load messages: ' + error.message, true); return; }
+  function rxHtml(id) {
+    const m = rx[id];
+    if (!m || !Object.keys(m).length) return '';
+    return `<div class="rx-row">${Object.entries(m).map(([e, v]) =>
+      `<button class="rx ${v.mine ? 'mine' : ''}" data-m="${id}" data-e="${UI.esc(e)}">${e}<b>${v.n}</b></button>`).join('')}</div>`;
+  }
 
-    msgs.forEach((m) => { if (m.profiles) profileCache[m.author_id] = m.profiles; });
+  function row(m, grouped) {
+    const p = profiles[m.author_id] || { username: 'unknown' };
+    const name = p.display_name || p.username;
+    const mine = m.author_id === me.id;
+    const canDelete = mine || canManage;
 
-    const ids = msgs.map((m) => m.id);
-    Object.keys(messageReactions).forEach((k) => delete messageReactions[k]);
-    if (ids.length) {
-      const { data: reactions } = await window.db.from('message_reactions').select('*').in('message_id', ids);
-      (reactions || []).forEach((r) => addReactionToState(r.message_id, r.emoji, r.user_id));
+    const left = grouped
+      ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`
+      : `<div class="m-av">${UI.avatar(p, 38)}</div>`;
+
+    const head = grouped ? '' :
+      `<div class="m-head"><span class="m-name" style="color:${p.accent_color || 'var(--txt-1)'}">${UI.esc(name)}</span>
+       ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
+       <span class="m-time">${UI.timeLabel(m.created_at)}</span></div>`;
+
+    return `<div class="m ${grouped ? 'grp' : ''}" data-id="${m.id}" data-au="${m.author_id}" data-ts="${m.created_at}">
+      ${left}
+      <div class="m-main">
+        ${head}
+        <div class="m-text" data-raw="${UI.esc(m.content || '')}">${md(m.content)}${m.edited_at ? '<span class="m-edited">(edited)</span>' : ''}</div>
+        <div class="rx-slot">${rxHtml(m.id)}</div>
+      </div>
+      <div class="m-acts">
+        <button class="a-rx" title="React"><i class="fa-regular fa-face-smile"></i></button>
+        ${mine ? '<button class="a-ed" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
+        ${canDelete ? '<button class="a-del del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}
+      </div>
+    </div>`;
+  }
+
+  function isGrouped(prevAuthor, prevTs, m) {
+    return prevAuthor === m.author_id && (new Date(m.created_at) - new Date(prevTs)) < 5 * 60 * 1000;
+  }
+
+  async function loadMessages(cid) {
+    const box = $('msgs');
+    box.innerHTML = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
+
+    const { data: msgs, error } = await window.db.from('messages')
+      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+      .eq('channel_id', cid).order('created_at', { ascending: true }).limit(100);
+
+    if (error) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + error.message, true); }
+    msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
+
+    Object.keys(rx).forEach((k) => delete rx[k]);
+    if (msgs.length) {
+      const { data: rr } = await window.db.from('message_reactions').select('*').in('message_id', msgs.map((m) => m.id));
+      (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
     }
 
-    listEl.innerHTML = '';
-    let lastAuthor = null, lastTime = 0;
-    msgs.forEach((m) => {
-      const t = new Date(m.created_at).getTime();
-      const compact = m.author_id === lastAuthor && (t - lastTime) < 5 * 60 * 1000;
-      listEl.insertAdjacentHTML('beforeend', messageRowHtml(m, compact));
-      lastAuthor = m.author_id; lastTime = t;
-    });
-    wireMessageRows();
-    scrollToBottom(true);
+    let html = intro(), pa = null, pt = 0;
+    msgs.forEach((m) => { html += row(m, isGrouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
+    box.innerHTML = html;
+    wire(box);
+    box.scrollTop = box.scrollHeight;
   }
 
-  function addReactionToState(messageId, emoji, userId) {
-    if (!messageReactions[messageId]) messageReactions[messageId] = {};
-    if (!messageReactions[messageId][emoji]) messageReactions[messageId][emoji] = { count: 0, mine: false, users: [] };
-    const bucket = messageReactions[messageId][emoji];
-    if (!bucket.users.includes(userId)) {
-      bucket.users.push(userId);
-      bucket.count++;
-      if (userId === currentUserId) bucket.mine = true;
-    }
+  function addRx(mid, e, uid) {
+    rx[mid] = rx[mid] || {};
+    rx[mid][e] = rx[mid][e] || { n: 0, mine: false, users: [] };
+    const b = rx[mid][e];
+    if (b.users.includes(uid)) return;
+    b.users.push(uid); b.n = b.users.length;
+    if (uid === me.id) b.mine = true;
   }
-  function removeReactionFromState(messageId, emoji, userId) {
-    const bucket = messageReactions[messageId]?.[emoji];
-    if (!bucket) return;
-    bucket.users = bucket.users.filter((u) => u !== userId);
-    bucket.count = bucket.users.length;
-    if (userId === currentUserId) bucket.mine = false;
-    if (bucket.count <= 0) delete messageReactions[messageId][emoji];
+  function dropRx(mid, e, uid) {
+    const b = rx[mid]?.[e]; if (!b) return;
+    b.users = b.users.filter((u) => u !== uid); b.n = b.users.length;
+    if (uid === me.id) b.mine = false;
+    if (!b.n) delete rx[mid][e];
   }
-
-  function reactionRowHtml(messageId) {
-    const map = messageReactions[messageId];
-    if (!map || !Object.keys(map).length) return '';
-    return `<div class="reaction-row">${Object.entries(map).map(([emoji, v]) =>
-      `<span class="reaction-pill ${v.mine ? 'mine' : ''}" data-msg="${messageId}" data-emoji="${emoji}">${emoji} ${v.count}</span>`
-    ).join('')}</div>`;
+  function repaintRx(mid) {
+    const slot = document.querySelector(`.m[data-id="${mid}"] .rx-slot`);
+    if (!slot) return;
+    slot.innerHTML = rxHtml(mid);
+    wire(slot);
   }
 
-  function messageRowHtml(m, compact) {
-    const author = m.profiles || profileCache[m.author_id] || { username: 'unknown', display_name: 'Unknown' };
-    const name = author.display_name || author.username;
-    const mine = m.author_id === currentUserId;
-
-    const avatarBlock = compact
-      ? `<div class="msg-avatar-slot"><span class="msg-time-hover">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
-      : `<div class="msg-avatar">${author.avatar_url ? `<img src="${author.avatar_url}" alt="" />` : `<div class="avatar-circle">${initials(name)}</div>`}</div>`;
-
-    const headerBlock = compact ? '' : `
-      <div class="msg-meta">
-        <span class="msg-author">${escapeHtml(name)}</span>
-        <span class="msg-time">${timeLabel(m.created_at)}</span>
-      </div>`;
-
-    return `
-      <div class="msg-row ${compact ? 'compact' : ''}" data-id="${m.id}" data-author="${m.author_id}">
-        ${avatarBlock}
-        <div class="msg-body">
-          ${headerBlock}
-          <div class="msg-content" data-raw="${escapeHtml(m.content || '')}">${renderMarkdown(m.content)}${m.edited_at ? '<span class="edited-tag">(edited)</span>' : ''}</div>
-          <div class="reaction-slot">${reactionRowHtml(m.id)}</div>
-        </div>
-        <div class="msg-actions">
-          <button class="act-react" title="React"><i class="fa-regular fa-face-smile"></i></button>
-          ${mine ? '<button class="act-edit" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
-          <button class="act-delete" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
-        </div>
-      </div>`;
-  }
-
-  function wireMessageRows() {
-    document.querySelectorAll('.msg-row').forEach((row) => {
-      const id = row.dataset.id;
-      const author = row.dataset.author;
-      const mine = author === currentUserId;
-
-      row.querySelector('.act-react')?.addEventListener('click', (e) => openEmojiPicker(e.currentTarget, id));
-
-      row.querySelector('.act-delete')?.addEventListener('click', async () => {
-        if (!confirm('Delete this message?')) return;
+  function wire(scope) {
+    scope.querySelectorAll('.rx').forEach((b) => { b.onclick = () => toggleRx(b.dataset.m, b.dataset.e); });
+    scope.querySelectorAll('.spoil').forEach((s) => { s.onclick = () => s.classList.add('shown'); });
+    scope.querySelectorAll('.m').forEach((el) => {
+      const id = el.dataset.id;
+      el.querySelector('.a-rx') && (el.querySelector('.a-rx').onclick = (ev) => picker(ev.currentTarget, el, id));
+      el.querySelector('.a-ed') && (el.querySelector('.a-ed').onclick = () => edit(el, id));
+      el.querySelector('.a-del') && (el.querySelector('.a-del').onclick = async () => {
+        if (!await UI.confirmDialog('Delete message', 'This removes it for everyone.', true)) return;
         const { error } = await window.db.from('messages').delete().eq('id', id);
-        if (error) showToast('Could not delete: ' + error.message, true);
-      });
-
-      if (mine) {
-        row.querySelector('.act-edit')?.addEventListener('click', () => startEdit(row, id));
-      }
-
-      row.querySelectorAll('.reaction-pill').forEach((pill) => {
-        pill.addEventListener('click', () => toggleReaction(pill.dataset.msg, pill.dataset.emoji));
+        if (error) UI.toast(error.message, true);
       });
     });
   }
 
-  function openEmojiPicker(anchorBtn, messageId) {
-    document.querySelectorAll('.emoji-picker').forEach((p) => p.remove());
-    const picker = document.createElement('div');
-    picker.className = 'emoji-picker';
-    picker.innerHTML = REACTIONS.map((e) => `<button data-e="${e}">${e}</button>`).join('');
-    anchorBtn.closest('.msg-row').style.position = 'relative';
-    anchorBtn.closest('.msg-row').appendChild(picker);
-    picker.querySelectorAll('button').forEach((b) => {
-      b.addEventListener('click', () => { toggleReaction(messageId, b.dataset.e); picker.remove(); });
-    });
-    setTimeout(() => {
-      document.addEventListener('click', function outside(ev) {
-        if (!picker.contains(ev.target) && ev.target !== anchorBtn) { picker.remove(); document.removeEventListener('click', outside); }
-      });
-    }, 0);
+  function picker(btn, rowEl, mid) {
+    document.querySelectorAll('.picker').forEach((p) => p.remove());
+    const p = document.createElement('div');
+    p.className = 'picker';
+    p.innerHTML = QUICK.map((e) => `<button data-e="${e}">${e}</button>`).join('');
+    rowEl.appendChild(p);
+    p.querySelectorAll('button').forEach((b) => { b.onclick = () => { toggleRx(mid, b.dataset.e); p.remove(); }; });
+    setTimeout(() => document.addEventListener('click', function off(ev) {
+      if (!p.contains(ev.target) && !btn.contains(ev.target)) { p.remove(); document.removeEventListener('click', off); }
+    }), 0);
   }
 
-  async function toggleReaction(messageId, emoji) {
-    const mine = messageReactions[messageId]?.[emoji]?.mine;
-    if (mine) {
-      await window.db.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', currentUserId).eq('emoji', emoji);
-    } else {
-      await window.db.from('message_reactions').insert({ message_id: messageId, user_id: currentUserId, emoji });
-    }
-    // Realtime subscription (below) reconciles UI; no local mutation needed here.
+  async function toggleRx(mid, emoji) {
+    const mine = rx[mid]?.[emoji]?.mine;
+    // Paint immediately, then let realtime confirm — reactions should feel instant.
+    if (mine) { dropRx(mid, emoji, me.id); repaintRx(mid); await window.db.from('message_reactions').delete().eq('message_id', mid).eq('user_id', me.id).eq('emoji', emoji); }
+    else { addRx(mid, emoji, me.id); repaintRx(mid); await window.db.from('message_reactions').insert({ message_id: mid, user_id: me.id, emoji }); }
   }
 
-  function startEdit(row, id) {
-    const contentEl = row.querySelector('.msg-content');
-    const raw = contentEl.dataset.raw.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+  function edit(el, id) {
+    const textEl = el.querySelector('.m-text');
+    if (!textEl) return;
+    const raw = new DOMParser().parseFromString(textEl.dataset.raw, 'text/html').documentElement.textContent;
     const box = document.createElement('div');
-    box.className = 'edit-box';
-    box.innerHTML = `<textarea rows="2">${raw}</textarea><span class="hint">Enter to save · Escape to cancel</span>`;
-    contentEl.replaceWith(box);
+    box.className = 'editbox';
+    box.innerHTML = `<textarea rows="2"></textarea><small>Enter to save · Esc to cancel</small>`;
+    box.querySelector('textarea').value = raw;
+    textEl.replaceWith(box);
     const ta = box.querySelector('textarea');
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.focus(); ta.setSelectionRange(raw.length, raw.length);
+    ta.style.height = ta.scrollHeight + 'px';
 
-    const cancel = () => { box.replaceWith(contentEl); };
-    ta.addEventListener('keydown', async (e) => {
-      if (e.key === 'Escape') { cancel(); return; }
+    ta.onkeydown = async (e) => {
+      if (e.key === 'Escape') return box.replaceWith(textEl);
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const newContent = ta.value.trim();
-        if (!newContent) return;
-        const { error } = await window.db.from('messages').update({ content: newContent, edited_at: new Date().toISOString() }).eq('id', id);
-        if (error) showToast('Could not save edit: ' + error.message, true);
-        // Realtime UPDATE event will replace the row content.
+        const v = ta.value.trim();
+        if (!v) return;
+        box.replaceWith(textEl);
+        const { error } = await window.db.from('messages')
+          .update({ content: v, edited_at: new Date().toISOString() }).eq('id', id);
+        if (error) UI.toast(error.message, true);
       }
-    });
+    };
   }
 
-  function scrollToBottom(force) {
-    const list = document.getElementById('messageList');
-    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 150;
-    if (force || nearBottom) list.scrollTop = list.scrollHeight;
-  }
-
-  // ---- Realtime ------------------------------------------------------------------
-  function subscribeRealtime(channelId) {
-    if (msgChannel) window.db.removeChannel(msgChannel);
-
-    msgChannel = window.db
-      .channel('room-' + channelId)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` }, async (payload) => {
-        const m = payload.new;
-        const author = await getProfile(m.author_id);
-        const list = document.getElementById('messageList');
-        const lastRow = list.lastElementChild;
-        const compact = lastRow && lastRow.dataset.author === m.author_id &&
-          (new Date(m.created_at).getTime() - new Date(lastRow.dataset.ts || 0).getTime()) < 5 * 60 * 1000;
-        list.insertAdjacentHTML('beforeend', messageRowHtml({ ...m, profiles: author }, !!compact));
-        const inserted = list.lastElementChild;
-        inserted.dataset.ts = m.created_at;
-        wireRowById(m.id);
-        scrollToBottom(false);
+  /* ================= realtime ================= */
+  function listen(cid) {
+    if (sub) window.db.removeChannel(sub);
+    sub = window.db.channel('ch:' + cid)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, async (p) => {
+        const m = p.new;
+        if (document.querySelector(`.m[data-id="${m.id}"]`)) return;
+        await profileOf(m.author_id);
+        const box = $('msgs');
+        const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+        const last = box.querySelector('.m:last-of-type');
+        box.insertAdjacentHTML('beforeend', row(m, last ? isGrouped(last.dataset.au, last.dataset.ts, m) : false));
+        wire(box.lastElementChild);
+        if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` }, (payload) => {
-        const m = payload.new;
-        const row = document.querySelector(`.msg-row[data-id="${m.id}"]`);
-        if (!row) return;
-        const existing = row.querySelector('.edit-box, .msg-content');
-        const replacement = document.createElement('div');
-        replacement.className = 'msg-content';
-        replacement.dataset.raw = escapeHtml(m.content || '');
-        replacement.innerHTML = renderMarkdown(m.content) + (m.edited_at ? '<span class="edited-tag">(edited)</span>' : '');
-        existing.replaceWith(replacement);
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
+        const m = p.new;
+        const el = document.querySelector(`.m[data-id="${m.id}"]`);
+        if (!el) return;
+        const cur = el.querySelector('.m-text, .editbox');
+        const nx = document.createElement('div');
+        nx.className = 'm-text';
+        nx.dataset.raw = UI.esc(m.content || '');
+        nx.innerHTML = md(m.content) + (m.edited_at ? '<span class="m-edited">(edited)</span>' : '');
+        cur.replaceWith(nx);
+        wire(el);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `channel_id=eq.${channelId}` }, (payload) => {
-        document.querySelector(`.msg-row[data-id="${payload.old.id}"]`)?.remove();
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
+        document.querySelector(`.m[data-id="${p.old.id}"]`)?.remove();
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, (payload) => {
-        const r = payload.new;
-        if (!document.querySelector(`.msg-row[data-id="${r.message_id}"]`)) return;
-        addReactionToState(r.message_id, r.emoji, r.user_id);
-        refreshReactionRow(r.message_id);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, (p) => {
+        if (!document.querySelector(`.m[data-id="${p.new.message_id}"]`)) return;
+        addRx(p.new.message_id, p.new.emoji, p.new.user_id); repaintRx(p.new.message_id);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, (payload) => {
-        const r = payload.old;
-        if (!document.querySelector(`.msg-row[data-id="${r.message_id}"]`)) return;
-        removeReactionFromState(r.message_id, r.emoji, r.user_id);
-        refreshReactionRow(r.message_id);
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, (p) => {
+        if (!document.querySelector(`.m[data-id="${p.old.message_id}"]`)) return;
+        dropRx(p.old.message_id, p.old.emoji, p.old.user_id); repaintRx(p.old.message_id);
       })
       .subscribe();
   }
 
-  function refreshReactionRow(messageId) {
-    const row = document.querySelector(`.msg-row[data-id="${messageId}"] .reaction-slot`);
-    if (!row) return;
-    row.innerHTML = reactionRowHtml(messageId);
-    row.querySelectorAll('.reaction-pill').forEach((pill) => {
-      pill.addEventListener('click', () => toggleReaction(pill.dataset.msg, pill.dataset.emoji));
-    });
-  }
-
-  function wireRowById(id) {
-    const row = document.querySelector(`.msg-row[data-id="${id}"]`);
-    if (!row) return;
-    const author = row.dataset.author;
-    row.querySelector('.act-react')?.addEventListener('click', (e) => openEmojiPicker(e.currentTarget, id));
-    if (author === currentUserId) row.querySelector('.act-edit')?.addEventListener('click', () => startEdit(row, id));
-    row.querySelector('.act-delete')?.addEventListener('click', async () => {
-      if (!confirm('Delete this message?')) return;
-      await window.db.from('messages').delete().eq('id', id);
-    });
-  }
-
-  // ---- Composer ------------------------------------------------------------------
-  function wireComposer() {
-    const input = document.getElementById('composerInput');
+  /* ================= composer ================= */
+  function composer() {
+    const ta = $('input');
     const send = async () => {
-      const content = input.value.trim();
-      if (!content || !activeChannelId) return;
-      input.value = '';
-      input.style.height = 'auto';
-      const { error } = await window.db.from('messages').insert({ channel_id: activeChannelId, author_id: currentUserId, content });
-      if (error) showToast('Could not send: ' + error.message, true);
+      const v = ta.value.trim();
+      if (!v || !active) return;
+      ta.value = ''; ta.style.height = 'auto';
+      const { error } = await window.db.from('messages')
+        .insert({ channel_id: active.id, author_id: me.id, content: v });
+      if (error) UI.toast(error.message, true);
     };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    });
-    input.addEventListener('input', () => {
-      input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-    });
-    document.getElementById('btnSend').addEventListener('click', send);
+    ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 168) + 'px'; };
+    ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+    $('send').onclick = send;
   }
 
-  // ---- Server menu + invites ------------------------------------------------------
-  function wireServerMenu() {
-    const btn = document.getElementById('btnServerMenu');
-    const menu = document.getElementById('serverMenu');
-    btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+  /* ================= menu, invites, channels ================= */
+  function modal(id) {
+    const m = $(id);
+    m.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => m.classList.add('hidden'); });
+    m.onclick = (e) => { if (e.target === m) m.classList.add('hidden'); };
+    return m;
+  }
+
+  function menus() {
+    const menu = $('srvMenu');
+    $('srvMenuBtn').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
     document.addEventListener('click', () => menu.classList.add('hidden'));
+    menu.onclick = (e) => e.stopPropagation();
 
-    document.getElementById('menuInvite').addEventListener('click', () => {
+    const mInv = modal('mInvite'), mCh = modal('mChan');
+
+    $('miInvite').onclick = () => { menu.classList.add('hidden'); $('invOut').value = ''; mInv.classList.remove('hidden'); };
+    $('invGo').onclick = async () => {
+      const hrs = +$('invExpiry').value;
+      const row = { server_id: serverId, created_by: me.id };
+      if (hrs) row.expires_at = new Date(Date.now() + hrs * 3600e3).toISOString();
+      const { data, error } = await window.db.from('invites').insert(row).select().single();
+      if (error) return UI.toast(error.message, true);
+      $('invOut').value = `${location.origin}${location.pathname.replace(/server\.html$/, 'portal.html')}?invite=${data.code}`;
+    };
+    $('invCopy').onclick = () => {
+      const v = $('invOut').value; if (!v) return;
+      navigator.clipboard.writeText(v).then(() => UI.toast('Invite link copied.'));
+    };
+
+    $('miChannel').onclick = () => {
       menu.classList.add('hidden');
-      document.getElementById('inviteCodeOutput').value = '';
-      document.getElementById('inviteModal').classList.remove('hidden');
-    });
-    document.getElementById('menuSettings').addEventListener('click', () => {
+      if (!canManage) return UI.toast('You don\u2019t have permission to add channels.', true);
+      $('chNameIn').value = ''; $('chErr').textContent = '';
+      $('chParent').innerHTML = '<option value="">No category</option>' +
+        channels.filter((c) => c.type === 'category')
+          .map((c) => `<option value="${c.id}">${UI.esc(c.name)}</option>`).join('');
+      mCh.classList.remove('hidden');
+      setTimeout(() => $('chNameIn').focus(), 60);
+    };
+    $('chGo').onclick = async () => {
+      const name = $('chNameIn').value.trim();
+      if (!name) return ($('chErr').textContent = 'Give the channel a name.');
+      const type = $('chType').value, parent = $('chParent').value || null;
+      const pos = channels.filter((c) => c.parent_id === parent).length;
+      const { data, error } = await window.db.from('channels')
+        .insert({ server_id: serverId, name, type, parent_id: parent, position: pos }).select().single();
+      if (error) return ($('chErr').textContent = error.message);
+      mCh.classList.add('hidden');
+      UI.toast(`#${name} created.`);
+      loadChannels(type === 'text' || type === 'announcement' ? data.id : null);
+    };
+
+    $('miSettings').onclick = () => {
+      if (!canManage) return UI.toast('Only people who can manage this server can open settings.', true);
+      window.location.href = `server-settings.html?id=${serverId}`;
+    };
+
+    $('miLeave').onclick = async () => {
       menu.classList.add('hidden');
-      showToast('Server settings (roles, theming) isn\u2019t built yet.');
-    });
+      if (srv.owner_id === me.id) return UI.toast('Owners can\u2019t leave — delete the server in settings instead.', true);
+      if (!await UI.confirmDialog('Leave server', `You'll lose access to ${srv.name} until someone invites you back.`, true)) return;
+      const { error } = await window.db.from('server_members').delete().eq('server_id', serverId).eq('user_id', me.id);
+      if (error) return UI.toast(error.message, true);
+      window.location.href = 'portal.html';
+    };
 
-    const inviteModal = document.getElementById('inviteModal');
-    document.getElementById('closeInviteModal').addEventListener('click', () => inviteModal.classList.add('hidden'));
-    inviteModal.addEventListener('click', (e) => { if (e.target === inviteModal) inviteModal.classList.add('hidden'); });
+    $('burger').onclick = () => {
+      $('rail').classList.add('open');
+      const s = document.createElement('div');
+      s.className = 'rail-scrim';
+      s.onclick = () => { $('rail').classList.remove('open'); s.remove(); };
+      document.body.appendChild(s);
+    };
 
-    document.getElementById('btnGenerateInvite').addEventListener('click', async () => {
-      const { data, error } = await window.db.from('invites').insert({ server_id: serverId, created_by: currentUserId }).select().single();
-      if (error) { showToast('Could not create invite: ' + error.message, true); return; }
-      document.getElementById('inviteCodeOutput').value = data.code;
-    });
-    document.getElementById('btnCopyInvite').addEventListener('click', () => {
-      const val = document.getElementById('inviteCodeOutput').value;
-      if (!val) return;
-      navigator.clipboard.writeText(val);
-      showToast('Invite code copied.');
-    });
+    $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
   }
 
-  function wireMobileToggle() {
-    document.getElementById('btnMobileChannels').addEventListener('click', () => {
-      document.getElementById('channelRail').classList.toggle('open');
-    });
-  }
+  /* ================= boot ================= */
+  (async () => {
+    const s = await UI.requireSession(); if (!s) return;
+    me = await UI.myProfile(s.user.id);
+    profiles[me.id] = me;
+
+    serverId = new URLSearchParams(location.search).get('id');
+    if (!serverId) return (window.location.href = 'portal.html');
+
+    const { data, error } = await window.db.from('servers')
+      .select('*, server_members(count)').eq('id', serverId).single();
+    if (error || !data) { $('gone').classList.remove('hidden'); return; }
+    srv = data;
+
+    $('shell').classList.remove('hidden');
+    $('srvName').textContent = srv.name;
+    const n = srv.server_members?.[0]?.count ?? 0;
+    $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
+
+    // A server can override the accent; everything themed off --accent follows.
+    if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
+
+    $('meAv').innerHTML = UI.avatar(me, 28);
+    $('meName').textContent = me.display_name || me.username;
+    $('meHandle').textContent = '@' + me.username;
+
+    canManage = srv.owner_id === me.id || me.is_platform_admin;
+    if (!canManage) {
+      const { data: ok } = await window.db.rpc('has_permission', { p_server_id: serverId, p_user_id: me.id, p_bit: 8 });
+      canManage = !!ok;
+    }
+
+    menus();
+    composer();
+    await loadChannels();
+  })();
 })();

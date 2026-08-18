@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>NexChat — Admin</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css" />
+</head>
+<body>
+<div class="hidden" id="denied" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
+  <div class="surface" style="max-width:340px;">
+    <div class="empty">
+      <div class="ico"><i class="fa-solid fa-shield-halved"></i></div>
+      <h3>Admins only</h3>
+      <p>This area is for platform administrators.</p>
+      <a href="portal.html" class="btn btn-primary" style="margin-top:16px;">Back</a>
+    </div>
+  </div>
+</div>
+
+<div class="set-wrap hidden" id="wrap">
+  <nav class="set-nav">
+    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back</span></a>
+    <div class="grp-label">Platform</div>
+    <button class="on" data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro requests <span id="pendCount"></span></button>
+    <button data-tab="users"><i class="fa-solid fa-users"></i> Users</button>
+  </nav>
+
+  <div class="set-main">
+    <section class="set-inner" data-pane="nitro">
+      <h2>Nitro requests</h2>
+      <div class="sub">Approving grants the animated halo and profile extras.</div>
+      <div id="reqRows"></div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="users">
+      <h2>Users</h2>
+      <div class="sub">Everyone with an account.</div>
+      <input id="uSearch" class="input" placeholder="Search by username" style="margin-bottom:16px;" />
+      <div id="userRows"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/admin.js"></script>
+</body>
+</html>

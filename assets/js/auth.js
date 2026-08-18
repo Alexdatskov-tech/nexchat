@@ -1,150 +1,77 @@
 (function () {
-  const tabSignIn = document.getElementById('tabSignIn');
-  const tabSignUp = document.getElementById('tabSignUp');
-  const formSignIn = document.getElementById('formSignIn');
-  const formSignUp = document.getElementById('formSignUp');
-  const toast = document.getElementById('toast');
+  const $ = (id) => document.getElementById(id);
+  const tabIn = $('tabIn'), tabUp = $('tabUp'), formIn = $('formIn'), formUp = $('formUp');
 
   function showTab(which) {
-    const isIn = which === 'signin';
-    tabSignIn.classList.toggle('active', isIn);
-    tabSignUp.classList.toggle('active', !isIn);
-    formSignIn.classList.toggle('hidden', !isIn);
-    formSignUp.classList.toggle('hidden', isIn);
+    const isIn = which === 'in';
+    tabIn.classList.toggle('on', isIn);
+    tabUp.classList.toggle('on', !isIn);
+    formIn.classList.toggle('hidden', !isIn);
+    formUp.classList.toggle('hidden', isIn);
   }
-  tabSignIn.addEventListener('click', () => showTab('signin'));
-  tabSignUp.addEventListener('click', () => showTab('signup'));
+  tabIn.onclick = () => showTab('in');
+  tabUp.onclick = () => showTab('up');
 
-  function showToast(msg, isError) {
-    toast.textContent = msg;
-    toast.classList.toggle('error', !!isError);
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3800);
-  }
-
-  function setFieldError(id, msg) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = msg || '';
-  }
-
-  function setLoading(btn, loading, label) {
-    btn.disabled = loading;
-    btn.textContent = loading ? 'Please wait…' : label;
-  }
+  const setErr = (id, m) => { $(id).textContent = m || ''; };
+  const busy = (btn, on, label) => { btn.disabled = on; btn.textContent = on ? 'Working…' : label; };
 
   const USERNAME_RE = /^[a-zA-Z0-9_]{2,32}$/;
 
-  // Supabase Auth requires an email/phone identifier under the hood even
-  // though the person only ever sees a username. This deterministically
-  // derives an invisible placeholder address from the username — never
-  // displayed, never emailed (email confirmation must stay OFF in the
-  // Supabase dashboard, since this address can't receive anything real).
-  // IMPORTANT: the domain must end in a real, IANA-registered TLD
-  // (.com, .dev, etc.) — Supabase's validator rejects made-up TLDs like
-  // .internal/.local/.test outright, even though nothing here ever
-  // actually needs to send or receive mail at this address.
-  function usernameToPlaceholderEmail(username) {
-    return `${username.trim().toLowerCase()}@users.nexchat-app.com`;
-  }
+  // Supabase Auth needs an email identifier internally. Nobody ever sees or
+  // receives mail at this address — it's derived from the username so sign-in
+  // stays username+password only. The TLD must be real or Supabase rejects it.
+  const toAddr = (u) => `${u.trim().toLowerCase()}@users.nexchat-app.com`;
 
-  // ---- Sign up ------------------------------------------------------------
-  formSignUp.addEventListener('submit', async (e) => {
+  formUp.onsubmit = async (e) => {
     e.preventDefault();
-    setFieldError('errUsername', '');
-    setFieldError('errSignUp', '');
+    setErr('errUser', ''); setErr('errUp', '');
+    const username = $('upUser').value.trim();
+    const pass = $('upPass').value, pass2 = $('upPass2').value;
+    const btn = $('btnUp');
 
-    const username = document.getElementById('suUsername').value.trim();
-    const password = document.getElementById('suPassword').value;
-    const passwordConfirm = document.getElementById('suPasswordConfirm').value;
-    const btn = document.getElementById('btnSignUp');
+    if (!USERNAME_RE.test(username)) return setErr('errUser', '2–32 characters, letters, numbers and underscores only.');
+    if (pass.length < 8) return setErr('errUp', 'Use at least 8 characters.');
+    if (pass !== pass2) return setErr('errUp', 'Those passwords don\u2019t match.');
 
-    if (!USERNAME_RE.test(username)) {
-      setFieldError('errUsername', 'Username: 2-32 characters, letters/numbers/underscore only.');
-      return;
-    }
-    if (password.length < 8) {
-      setFieldError('errSignUp', 'Password must be at least 8 characters.');
-      return;
-    }
-    if (password !== passwordConfirm) {
-      setFieldError('errSignUp', 'Passwords don\u2019t match.');
-      return;
-    }
-
-    setLoading(btn, true, 'Create account');
+    busy(btn, true, 'Create account');
     try {
-      // Optional pre-check RPC (public.is_username_available) — see setup notes.
-      if (window.db.rpc) {
-        const { data: available, error: checkErr } = await window.db.rpc('is_username_available', { p_username: username });
-        if (!checkErr && available === false) {
-          setFieldError('errUsername', 'That username is already taken.');
-          setLoading(btn, false, 'Create account');
-          return;
-        }
-      }
+      const { data: free } = await window.db.rpc('is_username_available', { p_username: username });
+      if (free === false) { setErr('errUser', 'That username is taken.'); busy(btn, false, 'Create account'); return; }
 
       const { data, error } = await window.db.auth.signUp({
-        email: usernameToPlaceholderEmail(username),
-        password,
+        email: toAddr(username), password: pass,
         options: { data: { username, display_name: username } },
       });
-
       if (error) throw error;
 
-      if (data.session) {
-        window.location.href = 'portal.html';
-      } else {
-        // Should not normally happen with email confirmation off, but handle it
-        // gracefully rather than telling them to check an email that doesn't exist.
-        showToast('Account created — try signing in now.');
-        showTab('signin');
-      }
+      if (data.session) window.location.href = 'portal.html';
+      else { UI.toast('Account created — sign in to continue.'); showTab('in'); }
     } catch (err) {
-      setFieldError('errSignUp', err.message || 'Something went wrong creating your account.');
-    } finally {
-      setLoading(btn, false, 'Create account');
-    }
-  });
+      setErr('errUp', err.message || 'Could not create that account.');
+    } finally { busy(btn, false, 'Create account'); }
+  };
 
-  // ---- Sign in --------------------------------------------------------------
-  formSignIn.addEventListener('submit', async (e) => {
+  formIn.onsubmit = async (e) => {
     e.preventDefault();
-    setFieldError('errSignIn', '');
-    const username = document.getElementById('siUsername').value.trim();
-    const password = document.getElementById('siPassword').value;
-    const btn = document.getElementById('btnSignIn');
-
-    setLoading(btn, true, 'Sign in');
+    setErr('errIn', '');
+    const btn = $('btnIn');
+    busy(btn, true, 'Sign in');
     try {
       const { data, error } = await window.db.auth.signInWithPassword({
-        email: usernameToPlaceholderEmail(username),
-        password,
+        email: toAddr($('inUser').value), password: $('inPass').value,
       });
-      if (error) throw new Error('Incorrect username or password.');
+      if (error) throw new Error('Wrong username or password.');
 
-      // Respect a platform-wide ban before letting them into the portal.
-      const { data: profile } = await window.db
-        .from('profiles')
-        .select('is_banned, ban_reason')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profile && profile.is_banned) {
+      const { data: p } = await window.db.from('profiles').select('is_banned, ban_reason').eq('id', data.user.id).single();
+      if (p?.is_banned) {
         await window.db.auth.signOut();
-        setFieldError('errSignIn', 'This account has been banned' + (profile.ban_reason ? `: ${profile.ban_reason}` : '.'));
-        return;
+        return setErr('errIn', 'This account is banned' + (p.ban_reason ? `: ${p.ban_reason}` : '.'));
       }
-
       window.location.href = 'portal.html';
     } catch (err) {
-      setFieldError('errSignIn', err.message || 'Could not sign in with those details.');
-    } finally {
-      setLoading(btn, false, 'Sign in');
-    }
-  });
+      setErr('errIn', err.message || 'Could not sign in.');
+    } finally { busy(btn, false, 'Sign in'); }
+  };
 
-  // If already signed in, skip straight to the portal.
-  window.db?.auth.getSession().then(({ data }) => {
-    if (data.session) window.location.href = 'portal.html';
-  });
+  window.db?.auth.getSession().then(({ data }) => { if (data.session) window.location.href = 'portal.html'; });
 })();

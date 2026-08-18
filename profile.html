@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>NexChat — Your profile</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css" />
+</head>
+<body>
+<div class="set-wrap">
+  <nav class="set-nav">
+    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back</span></a>
+    <div class="grp-label">Account</div>
+    <button class="on" data-tab="profile"><i class="fa-regular fa-user"></i> Profile</button>
+    <button data-tab="appearance"><i class="fa-solid fa-palette"></i> Appearance</button>
+    <button data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro</button>
+    <button data-tab="account"><i class="fa-solid fa-key"></i> Account</button>
+  </nav>
+
+  <div class="set-main">
+    <!-- PROFILE -->
+    <section class="set-inner" data-pane="profile">
+      <h2>Profile</h2>
+      <div class="sub">How you appear to everyone else on NexChat.</div>
+
+      <div class="set-block">
+        <h4>Preview</h4>
+        <div class="bsub">Updates live as you edit.</div>
+        <div class="pcard" id="pcard">
+          <div class="pcard-banner" id="pvBanner"></div>
+          <div class="pcard-body">
+            <div class="pcard-av" id="pvAvWrap"></div>
+            <h3><span id="pvName">—</span><span id="pvBadges"></span></h3>
+            <div class="handle" id="pvHandle">@—</div>
+            <div class="bio hidden" id="pvBio"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-block">
+        <h4>Identity</h4>
+        <div class="bsub">Your username is permanent; the display name is not.</div>
+        <div class="set-rows">
+          <div class="field">
+            <label for="fDisplay">Display name</label>
+            <input id="fDisplay" type="text" maxlength="60" placeholder="What people should call you" />
+          </div>
+          <div class="field">
+            <label for="fBio">About me</label>
+            <textarea id="fBio" rows="3" maxlength="500" placeholder="A line or two about you."></textarea>
+            <span class="hint"><span id="bioCount">0</span>/500</span>
+          </div>
+          <div class="field">
+            <label for="fStatus">Custom status</label>
+            <input id="fStatus" type="text" maxlength="128" placeholder="Building something" />
+          </div>
+        </div>
+      </div>
+
+      <div class="set-block">
+        <h4>Avatar</h4>
+        <div class="bsub">Square images look best. Under 2 MB.</div>
+        <div class="upload-row">
+          <div class="upload-prev" id="avPrev"><i class="fa-regular fa-user"></i></div>
+          <div style="flex:1;">
+            <input type="file" id="fAvatar" accept="image/*" />
+            <button class="btn btn-quiet btn-sm hidden" id="avClear" style="margin-top:8px;">Remove avatar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-block">
+        <h4>Banner</h4>
+        <div class="bsub">Wide image behind your profile card. Under 4 MB.</div>
+        <div class="upload-row">
+          <div class="upload-prev wide" id="bnPrev"><i class="fa-regular fa-image"></i></div>
+          <div style="flex:1;">
+            <input type="file" id="fBanner" accept="image/*" />
+            <button class="btn btn-quiet btn-sm hidden" id="bnClear" style="margin-top:8px;">Remove banner</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- APPEARANCE -->
+    <section class="set-inner hidden" data-pane="appearance">
+      <h2>Appearance</h2>
+      <div class="sub">Your accent colour follows you across servers.</div>
+      <div class="set-block">
+        <h4>Accent colour</h4>
+        <div class="bsub">Used for your avatar fallback and name highlight.</div>
+        <div class="swatches" id="swatches"></div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:16px;">
+          <input type="color" id="fAccent" />
+          <input type="text" id="fAccentHex" class="input mono" style="max-width:130px;" maxlength="7" />
+        </div>
+      </div>
+    </section>
+
+    <!-- NITRO -->
+    <section class="set-inner hidden" data-pane="nitro">
+      <h2>Nitro</h2>
+      <div class="sub">Animated avatar halo and profile extras. Granted by an admin.</div>
+
+      <div class="set-block" id="nitroActive" style="display:none;">
+        <h4 style="color:var(--nitro);"><i class="fa-solid fa-bolt"></i> Nitro is active</h4>
+        <div class="bsub" id="nitroSince"></div>
+        <div class="field" style="margin-top:14px;">
+          <label for="fHalo">Animated halo image</label>
+          <input id="fHalo" type="text" placeholder="https://…/loop.gif" />
+          <span class="hint">Direct link to a GIF or APNG. It rings your avatar everywhere.</span>
+        </div>
+      </div>
+
+      <div class="set-block" id="nitroPending" style="display:none;">
+        <h4>Request pending</h4>
+        <div class="bsub">An admin will review it. You'll see the badge here once it's approved.</div>
+      </div>
+
+      <div class="set-block" id="nitroRequest" style="display:none;">
+        <h4>Request Nitro</h4>
+        <div class="bsub">Tell the admins why — a sentence is plenty.</div>
+        <div class="field">
+          <textarea id="fNitroMsg" rows="3" placeholder="I'd like the animated halo for my profile."></textarea>
+        </div>
+        <button class="btn btn-primary" id="btnNitro" style="margin-top:12px;">Send request</button>
+      </div>
+
+      <div class="set-block" id="nitroDenied" style="display:none;">
+        <h4>Request declined</h4>
+        <div class="bsub" id="nitroDeniedNote"></div>
+        <button class="btn btn-ghost" id="btnNitroAgain" style="margin-top:6px;">Request again</button>
+      </div>
+    </section>
+
+    <!-- ACCOUNT -->
+    <section class="set-inner hidden" data-pane="account">
+      <h2>Account</h2>
+      <div class="sub">Sign-in details and session.</div>
+      <div class="set-block">
+        <div class="set-row">
+          <div class="info"><b>Username</b><small id="acUser">—</small></div>
+          <span class="badge badge-owner">Permanent</span>
+        </div>
+        <div class="set-row">
+          <div class="info"><b>Member since</b><small id="acSince">—</small></div>
+        </div>
+      </div>
+      <div class="set-block">
+        <h4>Change password</h4>
+        <div class="bsub">There's no email recovery, so don't lose the new one.</div>
+        <div class="set-rows">
+          <div class="field">
+            <label for="fPass1">New password</label>
+            <input id="fPass1" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+          </div>
+          <div class="field">
+            <label for="fPass2">Confirm</label>
+            <input id="fPass2" type="password" autocomplete="new-password" />
+          </div>
+          <p class="err" id="passErr"></p>
+        </div>
+        <button class="btn btn-ghost" id="btnPass" style="margin-top:12px;">Update password</button>
+      </div>
+      <div class="set-block">
+        <h4>Session</h4>
+        <div class="bsub">Sign out on this device.</div>
+        <button class="btn btn-danger" id="btnOut">Sign out</button>
+      </div>
+    </section>
+
+    <div class="save-bar" id="saveBar">
+      <button class="btn btn-quiet" id="btnReset">Reset</button>
+      <button class="btn btn-primary" id="btnSave">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/profile.js"></script>
+</body>
+</html>
