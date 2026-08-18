@@ -375,6 +375,12 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
   background: var(--accent); border-radius: 0 3px 3px 0;
   transform: translateY(-50%) scaleY(0); animation: barIn var(--t-slow) var(--spring) forwards;
 }
+.chan.connected { color: var(--txt-1); }
+.chan.connected > i { color: var(--accent); }
+.chan.connected .live-dot {
+  margin-left: auto; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); animation: pulse 2s infinite; flex-shrink: 0;
+}
 @keyframes barIn { to { transform: translateY(-50%) scaleY(1); } }
 .chan.soon { opacity: .45; }
 .chan .chan-edit { margin-left: auto; opacity: 0; color: var(--txt-3); font-size: 11px; padding: 2px 4px; }
@@ -414,13 +420,14 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
 .m:hover { background: rgba(255,255,255,.018); }
 .m:hover .m-acts { opacity: 1; pointer-events: auto; }
 .m.grp { padding-top: 1px; padding-bottom: 1px; }
-.m-gutter { width: 38px; min-width: 38px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.m-gutter { width: 38px; min-width: 38px; flex-shrink: 0; position: relative; }
 .m-gutter .hovertime {
-  font-size: 10px; color: var(--txt-3); font-family: var(--f-mono);
-  opacity: 0; transition: opacity var(--t-fast);
-  white-space: nowrap; letter-spacing: -.02em; line-height: 1;
+  position: absolute; right: 0; top: 0; line-height: 21px; height: 21px;
+  font-size: 10.5px; color: var(--txt-3); white-space: nowrap;
+  opacity: 0; transition: opacity var(--t-fast) var(--ease);
+  font-variant-numeric: tabular-nums;
 }
-.m:hover .m-gutter .hovertime { opacity: 1; }
+@media (hover: hover) { .m:hover .m-gutter .hovertime { opacity: 1; } }
 .m-av { width: 38px; height: 38px; flex-shrink: 0; margin-top: 2px; }
 .m-av .av { width: 100%; height: 100%; font-size: 15px; }
 .m-main { min-width: 0; flex: 1; padding-bottom: 1px; }
@@ -625,10 +632,10 @@ input[type=file]::file-selector-button:hover { background: var(--bg-4); }
    TOUCH: hover-only actions must stay reachable without a pointer
    ============================================================================ */
 @media (hover: none) {
-  .m-acts { opacity: 1; pointer-events: auto; position: static; background: none;
-            border: none; box-shadow: none; margin-left: auto; align-self: flex-start; }
-  .m-acts button { padding: 6px 7px; color: var(--txt-3); }
-  .m-gutter .hovertime { opacity: 1; }
+  /* No hover on touch: a tap selects the message and reveals its actions. */
+  .m.tapped { background: rgba(255,255,255,.04); }
+  .m.tapped .m-acts { opacity: 1; pointer-events: auto; }
+  .m-gutter .hovertime { display: none; }
   .chan .chan-edit { opacity: 1; }
 }
 

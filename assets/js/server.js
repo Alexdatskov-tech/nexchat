@@ -43,8 +43,9 @@
             </span>
           </div>`).join('')}</div>`;
       }
-      return `<div class="chan ${c.id === active?.id || inHere ? 'on' : ''}" data-id="${c.id}" data-voice="${isVoice}">
-          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>
+      const cls = [c.id === active?.id ? 'on' : '', inHere ? 'connected' : ''].filter(Boolean).join(' ');
+      return `<div class="chan ${cls}" data-id="${c.id}" data-voice="${isVoice}">
+          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>${inHere ? '<span class="live-dot"></span>' : ''}
         </div>${occupants}`;
     };
 
@@ -80,7 +81,7 @@
   }
 
   async function open(ch) {
-    if (!ch) return;
+    if (!ch || ch.type === 'voice' || ch.type === 'stage') return;
     active = ch;
     renderChannels();
     $('chIco').innerHTML = `<i class="fa-solid ${chanIcon(ch.type)}"></i>`;
@@ -113,7 +114,7 @@
     const name = p.display_name || p.username;
     const mine = m.author_id === me.id;
     const left = grouped
-      ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false })}</span></div>`
+      ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
       : `<div class="m-av">${UI.avatar(p, 38)}</div>`;
     const head = grouped ? '' :
       `<div class="m-head"><span class="m-name" style="color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
@@ -206,6 +207,14 @@
       const id = el.dataset.id;
       el.querySelectorAll('.rx').forEach((b) => { b.onclick = () => toggleRx(b.dataset.m, b.dataset.e); });
       el.querySelectorAll('.spoil').forEach((s) => { s.onclick = () => s.classList.add('shown'); });
+      if (window.matchMedia('(hover: none)').matches) {
+        el.addEventListener('click', (ev) => {
+          if (ev.target.closest('.m-acts, a, .rx, .spoil, button, video, audio, input')) return;
+          const was = el.classList.contains('tapped');
+          document.querySelectorAll('.m.tapped').forEach((x) => x.classList.remove('tapped'));
+          el.classList.toggle('tapped', !was);
+        });
+      }
       const rxb = el.querySelector('.a-rx');
       if (rxb) rxb.onclick = (ev) => { ev.stopPropagation(); picker(ev.currentTarget, el, id); };
       const edb = el.querySelector('.a-ed');
@@ -416,9 +425,16 @@
     vrOpen = on;
     $('vroom').classList.toggle('hidden', !on);
     $('msgs').classList.toggle('hidden', on);
+    $('chatHead').classList.toggle('hidden', on);
     $('composer').classList.toggle('hidden', on || !active);
     $('stage').classList.add('hidden');
     if (on) paintRoom(Voice.state());
+    else if (!active) {
+      // Nothing was open behind the room — fall back to the first text channel.
+      const first = channels.find((c) => c.type === 'text' || c.type === 'announcement');
+      if (first) open(first);
+    }
+    renderChannels();
   }
 
   function tileFor(p, st) {
@@ -513,7 +529,8 @@
 
   async function joinVoice(ch) {
     const st = Voice.state();
-    if (st.active && st.channel.id === ch.id) return;
+    // Already in this room — just bring the room view back up.
+    if (st.active && st.channel.id === ch.id) { showVoiceRoom(true); return; }
     if (st.active) await Voice.leave();
     try {
       await Voice.join(ch, serverId, { ...me, muted: false, deaf: false, cam: false, sharing: false }, paintVoice, onSpeaking);
@@ -574,11 +591,28 @@
       menu.classList.add('hidden');
       if (!canManage) return UI.toast('You don\u2019t have permission to add channels.', true);
       $('chNameIn').value = ''; $('chErr').textContent = '';
-      $('chParent').innerHTML = '<option value="">No category</option>' +
-        channels.filter((c) => c.type === 'category').map((c) => `<option value="${c.id}">${MD.esc(c.name)}</option>`).join('');
+      $('chType').value = 'text';
+      fillCategories();
       mCh.classList.remove('hidden');
       setTimeout(() => $('chNameIn').focus(), 60);
     };
+    // Picks the category that already holds channels of the chosen type, so a
+    // new voice channel lands under "Voice Channels" instead of the text group.
+    function fillCategories() {
+      const type = $('chType').value;
+      const cats = channels.filter((c) => c.type === 'category');
+      $('chParent').innerHTML = '<option value="">No category</option>' +
+        cats.map((c) => `<option value="${c.id}">${MD.esc(c.name)}</option>`).join('');
+      const wantVoice = type === 'voice' || type === 'stage';
+      let best = cats.find((cat) => {
+        const kids = channels.filter((c) => c.parent_id === cat.id && c.type !== 'category');
+        return kids.length && kids.every((k) => (k.type === 'voice' || k.type === 'stage') === wantVoice);
+      });
+      if (!best) best = cats.find((c) => wantVoice ? /voice|vc|talk/i.test(c.name) : /text|chat|general/i.test(c.name));
+      if (best) $('chParent').value = best.id;
+    }
+    $('chType').onchange = fillCategories;
+
     $('chGo').onclick = async () => {
       const name = $('chNameIn').value.trim();
       if (!name) return ($('chErr').textContent = 'Give the channel a name.');
@@ -589,7 +623,7 @@
       if (error) return ($('chErr').textContent = error.message);
       mCh.classList.add('hidden');
       UI.toast(`${name} created.`);
-      loadChannels(type === 'voice' ? null : data.id);
+      loadChannels((type === 'voice' || type === 'stage') ? null : data.id);
     };
 
     $('miSettings').onclick = () => {
