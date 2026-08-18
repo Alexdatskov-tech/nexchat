@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NexChat — Sign in</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css" />
+<style>
+  .auth-wrap {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .auth-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 2.2rem 2rem 2rem;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    justify-content: center;
+    margin-bottom: 1.6rem;
+  }
+  .brand-mark {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--cyan), var(--violet));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--elev-glow-cyan);
+    color: #06121a; font-size: 1.1rem;
+  }
+  .brand h1 { font-size: 1.4rem; font-weight: 800; }
+  .tabs {
+    display: flex;
+    background: rgba(0,0,0,0.25);
+    border-radius: var(--radius-sm);
+    padding: 4px;
+    margin-bottom: 1.5rem;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 0.6rem 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s var(--ease-standard);
+  }
+  .tab.active {
+    background: var(--glass-strong);
+    color: var(--text-primary);
+    box-shadow: var(--elev-1);
+  }
+  form { display: flex; flex-direction: column; gap: 1rem; }
+  form.hidden { display: none; }
+  .submit-row { margin-top: 0.4rem; }
+  .submit-row .btn { width: 100%; }
+  .fine-print {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 1.4rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+  <div class="orb-field">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="glass-panel auth-card">
+      <div class="brand">
+        <div class="brand-mark"><i class="fa-solid fa-hexagon-nodes"></i></div>
+        <h1 class="display">NexChat</h1>
+      </div>
+
+      <div class="tabs">
+        <button id="tabSignIn" class="tab active" type="button">Sign in</button>
+        <button id="tabSignUp" class="tab" type="button">Create account</button>
+      </div>
+
+      <form id="formSignIn">
+        <div class="field">
+          <label for="siEmail">Email</label>
+          <input id="siEmail" type="email" required autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label for="siPassword">Password</label>
+          <input id="siPassword" type="password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <p class="error" id="errSignIn"></p>
+        <div class="submit-row">
+          <button type="submit" id="btnSignIn" class="btn btn-primary">Sign in</button>
+        </div>
+      </form>
+
+      <form id="formSignUp" class="hidden">
+        <div class="field">
+          <label for="suUsername">Username</label>
+          <input id="suUsername" type="text" required placeholder="e.g. alexander" maxlength="32" />
+          <p class="hint">This is how people find and @mention you.</p>
+          <p class="error" id="errUsername"></p>
+        </div>
+        <div class="field">
+          <label for="suEmail">Email</label>
+          <input id="suEmail" type="email" required autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label for="suPassword">Password</label>
+          <input id="suPassword" type="password" required autocomplete="new-password" placeholder="At least 8 characters" />
+        </div>
+        <p class="error" id="errSignUp"></p>
+        <div class="submit-row">
+          <button type="submit" id="btnSignUp" class="btn btn-primary">Create account</button>
+        </div>
+      </form>
+
+      <p class="fine-print">By continuing you agree this is a hobby project and not, in fact, Discord.</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/supabase-client.js"></script>
+  <script src="assets/js/auth.js"></script>
+</body>
+</html>
