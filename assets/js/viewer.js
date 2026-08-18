@@ -25,6 +25,7 @@ window.Viewer = (function () {
   function extOf(n) { return (n.split('.').pop() || '').toLowerCase(); }
   function kindOf(name) {
     const e = extOf(name);
+    if (e === 'pdf') return 'pdf';
     if (IMG.includes(e)) return 'image';
     if (VID.includes(e)) return 'video';
     if (AUD.includes(e)) return 'audio';
@@ -54,6 +55,92 @@ window.Viewer = (function () {
       document.head.appendChild(s);
     });
     return aceReady;
+  }
+
+  /* ---- PDF viewer (PDF.js, renders to canvas — never force-downloads) ---- */
+  const PDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+  let pdfReady = null;
+  function loadPdfJs() {
+    if (pdfReady) return pdfReady;
+    pdfReady = new Promise((res, rej) => {
+      if (window.pdfjsLib) return res();
+      const s = document.createElement('script');
+      s.src = PDF_CDN + '/pdf.min.js';
+      s.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_CDN + '/pdf.worker.min.js';
+        res();
+      };
+      s.onerror = () => rej(new Error('pdf.js failed to load'));
+      document.head.appendChild(s);
+    });
+    return pdfReady;
+  }
+
+  function pdfViewer(att) {
+    const el = document.createElement('div');
+    el.className = 'pdfv';
+    el.innerHTML = `
+      <div class="pv-head">
+        <span class="pv-name"><i class="fa-solid fa-file-pdf"></i> ${MD.esc(att.file_name)}</span>
+        <span style="flex:1"></span>
+        <button class="pv-prev" title="Previous page"><i class="fa-solid fa-chevron-left"></i></button>
+        <span class="pv-page mono">–</span>
+        <button class="pv-next" title="Next page"><i class="fa-solid fa-chevron-right"></i></button>
+        <button class="pv-out" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+        <button class="pv-in" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+        <button class="pv-fit" title="Fit width">Fit</button>
+        <a class="pv-dl" href="${att.url}" download title="Download"><i class="fa-solid fa-download"></i></a>
+      </div>
+      <div class="pv-wrap">
+        <div class="pv-load"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading PDF…</div>
+        <canvas class="pv-canvas hidden"></canvas>
+      </div>`;
+
+    const wrap = el.querySelector('.pv-wrap'), canvas = el.querySelector('.pv-canvas');
+    const load = el.querySelector('.pv-load'), pageLbl = el.querySelector('.pv-page');
+    const h = { doc: null, page: 1, total: 0, scale: 1, fit: true, task: null, dpr: window.devicePixelRatio || 1 };
+
+    async function draw() {
+      if (!h.doc) return;
+      try {
+        const page = await h.doc.getPage(h.page);
+        const base = page.getViewport({ scale: 1 });
+        if (h.fit) h.scale = Math.max((wrap.clientWidth || 520) - 28, 200) / base.width;
+        const vp = page.getViewport({ scale: h.scale });
+        canvas.width = Math.floor(vp.width * h.dpr);
+        canvas.height = Math.floor(vp.height * h.dpr);
+        canvas.style.width = Math.floor(vp.width) + 'px';
+        canvas.style.height = Math.floor(vp.height) + 'px';
+        if (h.task) { try { h.task.cancel(); } catch {} }
+        h.task = page.render({
+          canvasContext: canvas.getContext('2d'), viewport: vp,
+          transform: h.dpr !== 1 ? [h.dpr, 0, 0, h.dpr, 0, 0] : undefined,
+        });
+        await h.task.promise;
+        pageLbl.textContent = `${h.page} / ${h.total}`;
+      } catch { /* cancelled mid-render */ }
+    }
+
+    (async () => {
+      try {
+        await loadPdfJs();
+        h.doc = await window.pdfjsLib.getDocument({ url: att.url }).promise;
+        h.total = h.doc.numPages;
+        load.classList.add('hidden');
+        canvas.classList.remove('hidden');
+        await draw();
+      } catch {
+        load.innerHTML = `<span style="color:#FF8085"><i class="fa-solid fa-circle-exclamation"></i> Couldn't render this PDF.</span>
+          <a href="${att.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:8px;">Open</a>`;
+      }
+    })();
+
+    el.querySelector('.pv-prev').onclick = () => { if (h.page > 1) { h.page--; draw(); } };
+    el.querySelector('.pv-next').onclick = () => { if (h.page < h.total) { h.page++; draw(); } };
+    el.querySelector('.pv-out').onclick = () => { h.fit = false; h.scale = Math.max(0.25, h.scale / 1.25); draw(); };
+    el.querySelector('.pv-in').onclick = () => { h.fit = false; h.scale = Math.min(6, h.scale * 1.25); draw(); };
+    el.querySelector('.pv-fit').onclick = () => { h.fit = true; draw(); };
+    return el;
   }
 
   /* ---- audio player ---- */
@@ -161,9 +248,19 @@ window.Viewer = (function () {
     };
     el.querySelector('.vp-pip').onclick = () => { if (v.requestPictureInPicture) v.requestPictureInPicture().catch(() => {}); };
     el.querySelector('.vp-fs').onclick = () => {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else el.requestFullscreen?.();
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.();
+      } else if (el.requestFullscreen) {
+        el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+      } else if (v.webkitEnterFullscreen) {
+        v.webkitEnterFullscreen();   // iOS Safari only exposes it on the <video>
+      }
     };
+    document.addEventListener('fullscreenchange', () => {
+      const on = document.fullscreenElement === el;
+      el.classList.toggle('fs', on);
+      el.querySelector('.vp-fs').innerHTML = `<i class="fa-solid fa-${on ? 'compress' : 'expand'}"></i>`;
+    });
     return el;
   }
 
@@ -256,6 +353,7 @@ window.Viewer = (function () {
       w.querySelector('img').onclick = () => lightbox(att.url, att.file_name);
       return w;
     }
+    if (kind === 'pdf') return pdfViewer(att);
     if (kind === 'audio') return audioPlayer(att);
     if (kind === 'video') return videoPlayer(att);
     if (kind === 'code' && att.file_size <= 512 * 1024) return codeBlock(att);

@@ -14,8 +14,9 @@
     if (!t.dash_bg) { document.body.classList.remove('has-bg'); return; }
     document.body.classList.add('has-bg');
     document.documentElement.style.setProperty('--dash-bg', t.dash_bg);
-    document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 62) / 100);
+    document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
     document.documentElement.style.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
+    document.documentElement.style.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
     if (!document.querySelector('.dash-veil')) {
       const v = document.createElement('div');
       v.className = 'dash-veil';

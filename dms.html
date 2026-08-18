@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>NexChat — Messages</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=10" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="assets/css/theme.css?v=10" />
+</head>
+<body>
+<div class="shell" id="shell">
+  <aside class="rail dm-rail" id="rail">
+    <div class="rail-head">
+      <a class="home" href="portal.html" title="Servers"><i class="fa-solid fa-arrow-left"></i></a>
+      <div class="meta"><b>Messages</b><small id="dmSub">Direct & group chats</small></div>
+      <button class="btn btn-quiet btn-icon" id="btnNewDm" title="New conversation"><i class="fa-solid fa-pen-to-square"></i></button>
+    </div>
+
+    <div class="dm-tabs">
+      <button class="on" data-tab="chats">Chats</button>
+      <button data-tab="friends">Friends</button>
+      <button data-tab="requests">Requests <span class="pill hidden" id="reqPill">0</span></button>
+    </div>
+    <div class="dm-search"><input id="dmFilter" class="input" placeholder="Search" /></div>
+    <div class="dm-list" id="dmList"></div>
+
+    <div class="rail-foot">
+      <a class="me" href="profile.html">
+        <span id="meAv"></span>
+        <span class="nm"><b id="meName">…</b><small id="meHandle"></small></span>
+      </a>
+      <button class="btn btn-quiet btn-icon" id="btnOut" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-head" id="chatHead">
+      <button class="btn btn-quiet btn-icon m-burger" id="burger" style="display:none;"><i class="fa-solid fa-bars"></i></button>
+      <span id="convAv"></span>
+      <b id="convName">Select a conversation</b>
+      <span class="topic hidden" id="convSub"></span>
+      <span style="flex:1"></span>
+      <button class="btn btn-quiet btn-icon hidden" id="btnConvInfo" title="Details"><i class="fa-solid fa-circle-info"></i></button>
+    </header>
+
+    <div class="msgs" id="msgs"></div>
+
+    <div class="composer hidden" id="composer">
+      <div class="upbar hidden" id="upbar"><i style="width:0"></i></div>
+      <div class="tray hidden" id="tray"></div>
+      <div class="composer-inner">
+        <button class="attach-btn" id="attachBtn" title="Attach files"><i class="fa-solid fa-paperclip"></i></button>
+        <textarea id="input" rows="1" placeholder="Message"></textarea>
+        <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up"></i></button>
+      </div>
+      <input type="file" id="fileIn" multiple class="hidden" />
+      <div class="composer-hint">
+        <span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> newline</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="overlay hidden" id="mNew">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head"><h3>New conversation</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="addUser">Add a friend by username</label>
+        <div class="copyrow">
+          <input id="addUser" class="input" placeholder="alexander" />
+          <button class="btn btn-ghost" id="addUserGo">Add</button>
+        </div>
+        <span class="hint">They'll get a friend request you can message once accepted.</span>
+      </div>
+      <div class="field">
+        <label>Start a group chat</label>
+        <input id="groupName" class="input" placeholder="Group name" />
+        <div id="friendPicks" style="margin-top:10px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+      <p class="err" id="newErr"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-quiet" data-close>Cancel</button>
+      <button class="btn btn-primary" id="groupGo">Create group</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js?v=10"></script>
+<script src="assets/js/supabase-client.js?v=10"></script>
+<script src="assets/js/ui.js?v=10"></script>
+<script src="assets/js/md.js?v=10"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=10"></script>
+<script src="assets/js/viewer.js?v=10"></script>
+<script src="assets/js/dms.js?v=10"></script>
+</body>
+</html>

@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=9" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=10" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=9" />
+<link rel="stylesheet" href="assets/css/theme.css?v=10" />
 </head>
 <body>
 <div class="set-wrap">
@@ -17,6 +17,7 @@
     <button data-tab="appearance"><i class="fa-solid fa-palette"></i> Appearance</button>
     <button data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro</button>
     <button data-tab="account"><i class="fa-solid fa-key"></i> Account</button>
+    <button data-tab="dev"><i class="fa-solid fa-code"></i> Developer</button>
   </nav>
 
   <div class="set-main">
@@ -92,13 +93,25 @@
         <h4>Dashboard background</h4>
         <div class="bsub">Shows behind your server cards. Pick a preset or paste any image URL.</div>
         <div class="bg-presets" id="bgPresets"></div>
+        <div class="upload-row" style="margin-top:14px;">
+          <div class="upload-prev wide" id="wpPrev"><i class="fa-regular fa-image"></i></div>
+          <div class="field" style="flex:1;">
+            <label>Upload your own wallpaper</label>
+            <input type="file" id="fWallpaper" accept="image/*" />
+            <span class="hint">Stored in your NexChat cloud, so it follows you to any device. Under 10 MB.</span>
+          </div>
+        </div>
         <div class="field" style="margin-top:14px;">
-          <label for="fBgUrl">Custom image URL</label>
+          <label for="fBgUrl">…or paste an image URL</label>
           <input id="fBgUrl" type="text" placeholder="https://…/wallpaper.jpg" />
         </div>
         <div class="field" style="margin-top:14px;">
-          <label>Darken</label>
-          <div class="range-row"><input type="range" id="fBgDim" min="0" max="95" value="62"><span id="bgDimV">62%</span></div>
+          <label>Brightness</label>
+          <div class="range-row"><input type="range" id="fBgBright" min="20" max="200" value="100"><span id="bgBrightV">100%</span></div>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Darken overlay</label>
+          <div class="range-row"><input type="range" id="fBgDim" min="0" max="95" value="0"><span id="bgDimV">0%</span></div>
         </div>
         <div class="field" style="margin-top:10px;">
           <label>Blur</label>
@@ -190,6 +203,30 @@
       </div>
     </section>
 
+    <!-- DEVELOPER -->
+    <section class="set-inner hidden" data-pane="dev">
+      <h2>Developer</h2>
+      <div class="sub">Low-level connection controls. Leave off unless you know why you need them.</div>
+
+      <div class="set-block">
+        <div class="set-row">
+          <div class="info"><b>Developer mode</b><small>Unlocks manual STUN server selection for voice calls.</small></div>
+          <label class="perm" style="padding:0;"><input type="checkbox" id="devToggle"></label>
+        </div>
+      </div>
+
+      <div class="set-block hidden" id="devPanel">
+        <h4>STUN servers</h4>
+        <div class="bsub">NexChat measures each one and picks the fastest automatically. Tick servers to override that choice — changes apply to the call you're already on as well as the next one.</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="iceProbe"><i class="fa-solid fa-gauge-high"></i> Re-test all</button>
+          <button class="btn btn-quiet btn-sm" id="iceAuto">Back to automatic</button>
+        </div>
+        <div class="ice-list" id="iceList"></div>
+        <p class="hint" style="margin-top:12px;">TURN relays (openrelay.metered.ca) stay enabled always — they're the fallback when a direct path can't be found.</p>
+      </div>
+    </section>
+
     <div class="save-bar" id="saveBar">
       <button class="btn btn-quiet" id="btnReset">Reset</button>
       <button class="btn btn-primary" id="btnSave">Save changes</button>
@@ -199,10 +236,12 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=9"></script>
-<script src="assets/js/supabase-client.js?v=9"></script>
-<script src="assets/js/ui.js?v=9"></script>
-<script src="assets/js/md.js?v=9"></script>
-<script src="assets/js/profile.js?v=9"></script>
+<script src="assets/js/config.js?v=10"></script>
+<script src="assets/js/supabase-client.js?v=10"></script>
+<script src="assets/js/ui.js?v=10"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=10"></script>
+<script src="assets/js/ice.js?v=10"></script>
+<script src="assets/js/md.js?v=10"></script>
+<script src="assets/js/profile.js?v=10"></script>
 </body>
 </html>

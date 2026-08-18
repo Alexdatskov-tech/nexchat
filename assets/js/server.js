@@ -115,9 +115,9 @@
     const mine = m.author_id === me.id;
     const left = grouped
       ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
-      : `<div class="m-av">${UI.avatar(p, 38)}</div>`;
+      : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
     const head = grouped ? '' :
-      `<div class="m-head"><span class="m-name" style="color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
        ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
        <span class="m-time">${UI.timeLabel(m.created_at)}</span></div>`;
 
@@ -163,7 +163,7 @@
       const ids = msgs.map((m) => m.id);
       const [{ data: rr }, { data: aa }] = await Promise.all([
         window.db.from('message_reactions').select('*').in('message_id', ids),
-        window.db.from('message_attachments').select('*').in('message_id', ids),
+        window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
       ]);
       (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
       (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
@@ -207,9 +207,12 @@
       const id = el.dataset.id;
       el.querySelectorAll('.rx').forEach((b) => { b.onclick = () => toggleRx(b.dataset.m, b.dataset.e); });
       el.querySelectorAll('.spoil').forEach((s) => { s.onclick = () => s.classList.add('shown'); });
+      el.querySelectorAll('[data-u]').forEach((x) => {
+        x.onclick = (ev) => { ev.stopPropagation(); UI.userCard(x.dataset.u, { serverId }); };
+      });
       if (window.matchMedia('(hover: none)').matches) {
         el.addEventListener('click', (ev) => {
-          if (ev.target.closest('.m-acts, a, .rx, .spoil, button, video, audio, input')) return;
+          if (ev.target.closest('.m-acts, a, .rx, .spoil, button, video, audio, input, [data-u]')) return;
           const was = el.classList.contains('tapped');
           document.querySelectorAll('.m.tapped').forEach((x) => x.classList.remove('tapped'));
           el.classList.toggle('tapped', !was);
@@ -306,7 +309,8 @@
         box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
         const el = box.lastElementChild;
         wire(el);
-        const { data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', m.id);
+        const { data: aa } = await window.db.from('message_attachments')
+          .select('*').eq('message_id', m.id).order('position', { ascending: true });
         if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
         if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
@@ -388,8 +392,11 @@
             const up = await S3().put(key, f, (p) => {
               fill.style.width = Math.round(((done + p / 100) / files.length) * 100) + '%';
             });
+            // position preserves the order files were attached, so an
+            // image/pdf/image sequence stays image, pdf, image.
             await window.db.from('message_attachments').insert({
-              message_id: msg.id, url: up.url, file_name: f.name, file_size: f.size, mime_type: up.type,
+              message_id: msg.id, url: up.url, file_name: f.name,
+              file_size: f.size, mime_type: up.type, position: files.indexOf(f),
             });
           } catch (err) { UI.toast(`${f.name}: ${err.message}`, true); }
           done++;
@@ -397,7 +404,8 @@
         }
         setTimeout(() => { bar.classList.add('hidden'); fill.style.width = '0'; }, 400);
 
-        const { data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', msg.id);
+        const { data: aa } = await window.db.from('message_attachments')
+          .select('*').eq('message_id', msg.id).order('position', { ascending: true });
         attCache[msg.id] = aa || [];
         paintAtts(msg.id);
       }
@@ -424,6 +432,7 @@
   function showVoiceRoom(on) {
     vrOpen = on;
     $('vroom').classList.toggle('hidden', !on);
+    $('vstats').classList.toggle('hidden', !on);
     $('msgs').classList.toggle('hidden', on);
     $('chatHead').classList.toggle('hidden', on);
     $('composer').classList.toggle('hidden', on || !active);
@@ -437,11 +446,16 @@
     renderChannels();
   }
 
-  function tileFor(p, st) {
+  // Every participant can contribute two feeds: their camera and their screen.
+  function feedsFor(p) {
     const isMe = p.id === me.id;
-    const stream = isMe ? Voice.localStream() : Voice.peerStream(p.id);
-    const live = stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
-    return { p, isMe, stream, live };
+    const camS = isMe ? Voice.localCam() : Voice.peerCam(p.id);
+    const scrS = isMe ? Voice.localScreen() : Voice.peerScreen(p.id);
+    const out = [];
+    if (scrS) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
+    if (camS) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
+    if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
+    return out;
   }
 
   function paintRoom(st) {
@@ -456,7 +470,7 @@
       if (icon) b.innerHTML = icon;
     };
     set('vrMute', 'off', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
-    set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple"></i>`);
+    set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple${st.deaf ? '' : ''}"></i>`);
     set('vrCam', 'live', st.cam);
     set('vrShare', 'live', st.sharing);
     $('vcMute').classList.toggle('on', st.muted);
@@ -466,32 +480,50 @@
     $('vcShare').classList.toggle('on', st.sharing);
 
     const grid = $('vrStage');
-    const people = [...st.members.values()];
-    grid.classList.toggle('solo', people.length === 1);
+    const feeds = [...st.members.values()].flatMap(feedsFor);
+    grid.classList.toggle('solo', feeds.length === 1);
 
-    people.forEach((p) => {
-      const { isMe, stream, live } = tileFor(p, st);
-      let t = grid.querySelector(`[data-t="${p.id}"]`);
+    const seen = new Set();
+    feeds.forEach((f) => {
+      seen.add(f.key);
+      let t = grid.querySelector(`[data-t="${f.key}"]`);
       if (!t) {
         t = document.createElement('div');
         t.className = 'vtile';
-        t.dataset.t = p.id;
-        t.innerHTML = `<video autoplay playsinline ${isMe ? 'muted' : ''}></video>
+        t.dataset.t = f.key;
+        t.innerHTML = `<video autoplay playsinline ${f.isMe ? 'muted' : ''}></video>
           <div class="vt-av"></div><div class="vt-name"></div>`;
+        t.querySelector('.vt-av').onclick = () => UI.userCard(f.p.id, { serverId });
         grid.appendChild(t);
       }
       const v = t.querySelector('video');
-      if (stream && v.srcObject !== stream) v.srcObject = stream;
-      v.style.display = live ? '' : 'none';
-      t.querySelector('.vt-av').innerHTML = live ? '' : UI.avatar(p, 76, { halo: false });
-      t.querySelector('.vt-av').style.display = live ? 'none' : '';
+      if (f.stream && v.srcObject !== f.stream) { v.srcObject = f.stream; v.play?.().catch(() => {}); }
+      if (!f.stream) v.srcObject = null;
+      v.style.display = f.stream ? '' : 'none';
+      const avBox = t.querySelector('.vt-av');
+      avBox.style.display = f.stream ? 'none' : '';
+      if (!f.stream) avBox.innerHTML = UI.avatar(f.p, 76, { halo: false });
       t.querySelector('.vt-name').innerHTML =
-        `${p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(p.display_name || p.username)}${isMe ? ' (you)' : ''}</span>`;
+        `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(f.p.display_name || f.p.username)}${f.isMe ? ' (you)' : ''}</span>`;
       t.querySelector('.vt-flag')?.remove();
-      if (p.sharing) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
-      t.classList.toggle('speaking', speakSet.has(p.id) && !p.muted);
+      if (f.screen) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
+      t.classList.toggle('speaking', speakSet.has(f.p.id) && !f.p.muted);
     });
-    [...grid.children].forEach((t) => { if (!st.members.has(t.dataset.t)) t.remove(); });
+    [...grid.children].forEach((t) => { if (!seen.has(t.dataset.t)) t.remove(); });
+  }
+
+  function paintStats(st) {
+    const bar = $('vstats');
+    if (!vrOpen) return;
+    const rttCls = st.rtt === 0 ? '' : st.rtt < 60 ? 'good' : st.rtt < 160 ? 'warn' : 'bad';
+    bar.innerHTML = `
+      <span class="st ${st.res ? 'good' : ''}"><i class="fa-solid fa-display"></i> Video <b>${st.res || 'off'}</b></span>
+      <span class="st"><i class="fa-solid fa-film"></i> <b>${st.fps || 0}</b> fps</span>
+      <span class="st"><i class="fa-solid fa-video"></i> <b>${st.vkbps || 0}</b> kbps</span>
+      <span class="st good"><i class="fa-solid fa-waveform-lines"></i> Audio <b>${st.akbps || 0}</b> kbps</span>
+      <span class="st"><i class="fa-solid fa-music"></i> <b>${MD.esc(st.codec || 'Opus stereo 48kHz')}</b></span>
+      <span class="spacer"></span>
+      <span class="st ${rttCls}"><i class="fa-solid fa-tower-broadcast"></i> <b>${st.rtt || 0}</b> ms</span>`;
   }
 
   function paintVoice(st) {
@@ -533,7 +565,8 @@
     if (st.active && st.channel.id === ch.id) { showVoiceRoom(true); return; }
     if (st.active) await Voice.leave();
     try {
-      await Voice.join(ch, serverId, { ...me, muted: false, deaf: false, cam: false, sharing: false }, paintVoice, onSpeaking);
+      await Voice.join(ch, serverId, { ...me, muted: false, deaf: false, cam: false, sharing: false },
+                       paintVoice, onSpeaking, paintStats);
       showVoiceRoom(true);
     } catch { /* mic denied — Voice already surfaced the reason */ }
   }

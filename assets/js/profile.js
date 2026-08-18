@@ -12,7 +12,7 @@
     { n: 'Moss',    v: 'linear-gradient(135deg,#16281B,#101E23 60%,#0D1014)' },
     { n: 'Dusk',    v: 'radial-gradient(120% 100% at 20% 0%,#2B2246,#141222 55%,#0B0A11)' },
   ];
-  let bgVal = '', bgDim = 62, bgBlur = 0;
+  let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
 
   function applyBg() {
     if (!bgVal) { document.body.classList.remove('has-bg'); return; }
@@ -20,6 +20,7 @@
     document.documentElement.style.setProperty('--dash-bg', bgVal);
     document.documentElement.style.setProperty('--dash-dim', bgDim / 100);
     document.documentElement.style.setProperty('--dash-blur', bgBlur + 'px');
+    document.documentElement.style.setProperty('--dash-bright', bgBright / 100);
     if (!document.querySelector('.dash-veil')) {
       const v = document.createElement('div'); v.className = 'dash-veil'; document.body.appendChild(v);
     }
@@ -28,6 +29,7 @@
     document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));
     $('fBgDim').value = bgDim; $('bgDimV').textContent = bgDim + '%';
     $('fBgBlur').value = bgBlur; $('bgBlurV').textContent = bgBlur + 'px';
+    $('fBgBright').value = bgBright; $('bgBrightV').textContent = bgBright + '%';
     applyBg();
   }
 
@@ -38,7 +40,7 @@
       b.classList.add('on');
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       // Only the editable panes need the save bar.
-      $('saveBar').classList.toggle('hidden', b.dataset.tab === 'account');
+      $('saveBar').classList.toggle('hidden', b.dataset.tab === 'account' || b.dataset.tab === 'dev');
       window.scrollTo(0, 0);
     };
   });
@@ -94,8 +96,67 @@
     paintBgUI();
   };
   $('fBgDim').oninput = (e) => { bgDim = +e.target.value; paintBgUI(); };
+  $('fBgBright').oninput = (e) => { bgBright = +e.target.value; paintBgUI(); };
+  $('fWallpaper').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { UI.toast('That wallpaper is over 10 MB.', true); e.target.value = ''; return; }
+    wpFile = f;
+    const r = new FileReader();
+    r.onload = (ev) => {
+      $('wpPrev').innerHTML = `<img src="${ev.target.result}">`;
+      bgVal = `url('${ev.target.result}')`;   // instant local preview; uploads on save
+      $('fBgUrl').value = '';
+      paintBgUI();
+    };
+    r.readAsDataURL(f);
+  };
   $('fBgBlur').oninput = (e) => { bgBlur = +e.target.value; paintBgUI(); };
-  $('bgClear').onclick = () => { bgVal = ''; $('fBgUrl').value = ''; paintBgUI(); };
+  $('bgClear').onclick = () => {
+    bgVal = ''; wpFile = null;
+    $('fBgUrl').value = ''; $('fWallpaper').value = '';
+    $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
+    paintBgUI();
+  };
+
+  /* ---------- developer mode / STUN picker ---------- */
+  function paintIce() {
+    const probed = ICE.lastProbe();
+    const msOf = (u) => probed.find((p) => p.url === u)?.ms;
+    $('iceList').innerHTML = ICE.STUN.map((u) => {
+      const ms = msOf(u);
+      const cls = ms == null ? 'dead' : ms < 80 ? 'fast' : ms < 220 ? 'mid' : 'slow';
+      const label = ms == null ? 'untested' : ms + ' ms';
+      return `<label class="ice-row">
+        <input type="checkbox" value="${u}" ${manualStun.includes(u) ? 'checked' : ''}>
+        <code>${UI.esc(u)}</code><span class="ms ${cls}">${label}</span></label>`;
+    }).join('');
+    $('iceList').querySelectorAll('input').forEach((c) => {
+      c.onchange = async () => {
+        manualStun = [...$('iceList').querySelectorAll('input:checked')].map((x) => x.value);
+        if (window.Voice) await window.Voice.setManualStun(manualStun);
+        UI.toast(manualStun.length ? `Using ${manualStun.length} manual server${manualStun.length === 1 ? '' : 's'}.` : 'Back to automatic selection.');
+      };
+    });
+  }
+
+  $('devToggle').onchange = (e) => {
+    devMode = e.target.checked;
+    $('devPanel').classList.toggle('hidden', !devMode);
+    if (devMode) paintIce();
+  };
+  $('iceProbe').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Testing…';
+    await ICE.rank(ICE.STUN, true);
+    paintIce();
+    b.disabled = false; b.innerHTML = '<i class="fa-solid fa-gauge-high"></i> Re-test all';
+    UI.toast('Latency test finished.');
+  };
+  $('iceAuto').onclick = async () => {
+    manualStun = [];
+    if (window.Voice) await window.Voice.setManualStun([]);
+    paintIce();
+    UI.toast('Server selection is automatic again.');
+  };
 
   $('swatches').innerHTML = PRESETS.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}" title="${c}"></div>`).join('');
   document.querySelectorAll('.swatch').forEach((s) => { s.onclick = () => setAccent(s.dataset.c); });
@@ -141,8 +202,25 @@
         bio: $('fBio').value.trim() || null,
         custom_status: $('fStatus').value.trim() || null,
         accent_color: $('fAccent').value,
-        theme: { ...(me.theme || {}), dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur },
+        theme: { ...(me.theme || {}) },
       };
+
+      // Wallpaper lives in iDrive; Supabase only stores the URL, so the same
+      // background follows this account onto any other device.
+      if (wpFile) {
+        const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
+        const up = await window.__nx_tp.put(key, wpFile);
+        bgVal = `url('${up.url}')`;
+        patch.theme.dash_wallpaper_key = key;
+        wpFile = null;
+        $('fWallpaper').value = '';
+      }
+      patch.theme.dash_bg = bgVal;
+      patch.theme.dash_dim = bgDim;
+      patch.theme.dash_blur = bgBlur;
+      patch.theme.dash_bright = bgBright;
+      patch.theme.dev_mode = devMode;
+      patch.theme.manual_stun = manualStun;
       if (me.is_nitro) patch.banner_gif_url = $('fHalo').value.trim() || null;
 
       if (avatarFile) patch.avatar_url = await UI.upload('avatars', avatarFile, me.id);
@@ -225,8 +303,23 @@
     $('fStatus').value = me.custom_status || '';
     setAccent(me.accent_color || '#2FBF87');
     const th = me.theme || {};
-    bgVal = th.dash_bg || ''; bgDim = th.dash_dim ?? 62; bgBlur = th.dash_blur ?? 0;
-    if (bgVal.startsWith('url(')) $('fBgUrl').value = bgVal.slice(5, -2);
+    bgVal = th.dash_bg || '';
+    bgDim = th.dash_dim ?? 0;
+    bgBlur = th.dash_blur ?? 0;
+    bgBright = th.dash_bright ?? 100;
+    devMode = !!th.dev_mode;
+    manualStun = th.manual_stun || [];
+    wpFile = null;
+    if (bgVal.startsWith('url(')) {
+      const u = bgVal.slice(5, -2);
+      $('wpPrev').innerHTML = `<img src="${u}">`;
+      if (!th.dash_wallpaper_key) $('fBgUrl').value = u;
+    } else {
+      $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
+    }
+    $('devToggle').checked = devMode;
+    $('devPanel').classList.toggle('hidden', !devMode);
+    if (devMode) paintIce();
     paintBgUI();
     avatarFile = bannerFile = null; clearAvatar = clearBanner = false;
     $('fAvatar').value = ''; $('fBanner').value = '';

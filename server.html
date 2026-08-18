@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=9" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=10" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=9" />
+<link rel="stylesheet" href="assets/css/theme.css?v=10" />
 </head>
 <body>
 
@@ -25,6 +25,7 @@
   <aside class="rail" id="rail">
     <div class="rail-head">
       <a class="home" href="portal.html" title="All servers"><i class="fa-solid fa-arrow-left"></i></a>
+      <a class="home" href="dms.html" title="Direct messages"><i class="fa-solid fa-comment-dots"></i></a>
       <div class="meta">
         <b id="srvName">…</b>
         <small id="srvMembers"></small>
@@ -82,6 +83,7 @@
         </div>
       </div>
       <div class="vroom-stage" id="vrStage"></div>
+      <div class="vstats" id="vstats"></div>
       <div class="vroom-bar">
         <button class="vbtn" id="vrMute" title="Mute"><i class="fa-solid fa-microphone"></i></button>
         <button class="vbtn" id="vrDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
@@ -185,13 +187,14 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=9"></script>
-<script src="assets/js/supabase-client.js?v=9"></script>
-<script src="assets/js/ui.js?v=9"></script>
-<script src="assets/js/md.js?v=9"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=9"></script>
-<script src="assets/js/viewer.js?v=9"></script>
-<script src="assets/js/voice.js?v=9"></script>
-<script src="assets/js/server.js?v=9"></script>
+<script src="assets/js/config.js?v=10"></script>
+<script src="assets/js/supabase-client.js?v=10"></script>
+<script src="assets/js/ui.js?v=10"></script>
+<script src="assets/js/md.js?v=10"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=10"></script>
+<script src="assets/js/viewer.js?v=10"></script>
+<script src="assets/js/ice.js?v=10"></script>
+<script src="assets/js/voice.js?v=10"></script>
+<script src="assets/js/server.js?v=10"></script>
 </body>
 </html>

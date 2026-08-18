@@ -129,11 +129,13 @@
     const { data } = await window.db.from('roles').select('*').eq('server_id', sid).order('position', { ascending: false });
     $('roleRows').innerHTML = (data || []).map((r) => `
       <div class="set-block" data-role="${r.id}">
-        <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px;">
-          <span class="chip"><span class="dot" style="background:${UI.esc(r.color || '#99AAB5')}"></span>${UI.esc(r.name)}</span>
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px;flex-wrap:wrap;">
+          <span class="chip">${UI.roleIcon(r)}<span class="dot" style="background:${UI.esc(r.color || '#99AAB5')}"></span>${UI.esc(r.name)}</span>
           ${r.is_default ? '<span class="badge badge-owner">Everyone</span>' : ''}
-          <div style="margin-left:auto;display:flex;gap:6px;">
+          <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-quiet btn-sm r-icon" title="Set an image or emoji"><i class="fa-regular fa-image"></i> Icon</button>
             <button class="btn btn-quiet btn-sm r-ed">Rename</button>
+            <button class="btn btn-quiet btn-sm r-reset" title="Restore the default permission set">Reset</button>
             ${r.is_default ? '' : '<button class="btn btn-quiet btn-sm r-rm" style="color:#FF8085;">Delete</button>'}
             <button class="btn btn-primary btn-sm r-save">Save</button>
           </div>
@@ -159,6 +161,20 @@
         if (error) return UI.toast(error.message, true);
         loadRoles();
       };
+      // Default permission set: view, send, invite, connect, speak.
+      const DEFAULT_PERMS = 1 + 2 + 256 + 512 + 1024;
+      box.querySelector('.r-reset').onclick = async () => {
+        const label = r.is_default ? '@everyone' : r.name;
+        if (!await UI.confirmDialog(`Reset ${label}`,
+              'Permissions go back to the defaults: view channels, send messages, create invites, connect and speak.')) return;
+        const { error } = await window.db.from('roles').update({ permissions: DEFAULT_PERMS }).eq('id', r.id);
+        if (error) return UI.toast(error.message, true);
+        UI.toast(`${label} reset to defaults.`);
+        loadRoles();
+      };
+
+      box.querySelector('.r-icon').onclick = () => roleIconModal(r);
+
       box.querySelector('.r-rm')?.addEventListener('click', async () => {
         if (!await UI.confirmDialog(`Delete ${r.name}`, 'Members lose this role and its permissions.', true)) return;
         const { error } = await window.db.from('roles').delete().eq('id', r.id);
@@ -174,6 +190,73 @@
     if (error) return UI.toast(error.message, true);
     loadRoles();
   };
+
+  /* Role icons: an uploaded image (png, svg, ico, gif, webp) or a plain emoji. */
+  function roleIconModal(r) {
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal" style="max-width:400px;">
+      <div class="modal-head"><h3>Role icon</h3><button class="x-btn" data-c><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="modal-body">
+        <div class="upload-row">
+          <div class="upload-prev" id="riPrev">${r.icon_url ? UI.roleIcon({ icon_url: r.icon_url }).replace('role-ico', 'role-ico" style="width:34px;height:34px') : '<i class="fa-regular fa-image"></i>'}</div>
+          <div class="field" style="flex:1;">
+            <label>Upload an image</label>
+            <input type="file" id="riFile" accept=".png,.svg,.ico,.gif,.webp,.jpg,.jpeg,image/*" />
+            <span class="hint">PNG, SVG, ICO, GIF or WebP. Under 1 MB.</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="riEmoji">…or use an emoji</label>
+          <input id="riEmoji" class="input" maxlength="8" placeholder="🛡️" value="${r.icon_url && !/^https?:|^data:/.test(r.icon_url) ? UI.esc(r.icon_url) : ''}" />
+        </div>
+        <p class="err" id="riErr"></p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-quiet" id="riClear">Remove icon</button>
+        <button class="btn btn-primary" id="riSave">Save icon</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector('[data-c]').onclick = close;
+    ov.onclick = (e) => { if (e.target === ov) close(); };
+
+    let file = null;
+    ov.querySelector('#riFile').onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      if (f.size > 1024 * 1024) { ov.querySelector('#riErr').textContent = 'That image is over 1 MB.'; return; }
+      file = f;
+      const rd = new FileReader();
+      rd.onload = (ev) => { ov.querySelector('#riPrev').innerHTML = `<img src="${ev.target.result}" style="width:34px;height:34px;object-fit:contain">`; };
+      rd.readAsDataURL(f);
+    };
+
+    ov.querySelector('#riClear').onclick = async () => {
+      const { error } = await window.db.from('roles').update({ icon_url: null }).eq('id', r.id);
+      UI.toast(error ? error.message : 'Icon removed.', !!error);
+      close(); loadRoles();
+    };
+
+    ov.querySelector('#riSave').onclick = async () => {
+      const btn = ov.querySelector('#riSave');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        let icon = ov.querySelector('#riEmoji').value.trim() || null;
+        if (file) {
+          const key = `nexchat/roles/${sid}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`;
+          icon = (await window.__nx_tp.put(key, file)).url;
+        }
+        const { error } = await window.db.from('roles').update({ icon_url: icon }).eq('id', r.id);
+        if (error) throw error;
+        UI.toast('Role icon saved.');
+        close(); loadRoles();
+      } catch (err) {
+        ov.querySelector('#riErr').textContent = err.message || 'Could not save that icon.';
+        btn.disabled = false; btn.textContent = 'Save icon';
+      }
+    };
+  }
 
   /* ---- members ---- */
   let memCache = [], roleCache = [];
@@ -202,7 +285,8 @@
         ${UI.avatar(p, 32)}
         <div class="lmain">
           <b>${UI.esc(p.display_name || p.username)} ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}</b>
-          <small>@${UI.esc(p.username)}${theirs.length ? ' · ' + theirs.map((r) => UI.esc(r.name)).join(', ') : ''}</small>
+          <small>@${UI.esc(p.username)}</small>
+          ${theirs.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${theirs.map((r) => `<span class="chip">${UI.roleIcon(r)}<span class="dot" style="background:${UI.esc(r.color)}"></span>${UI.esc(r.name)}</span>`).join('')}</div>` : ''}
         </div>
         <div class="lacts">
           <button class="btn btn-quiet btn-sm m-role">Roles</button>
@@ -226,6 +310,7 @@
         UI.toast(error ? error.message : 'Member banned.', !!error); loadMembers();
       });
       row.querySelector('.m-role').onclick = () => roleModal(uid, memberRoles);
+      row.querySelector('.av, .av-halo')?.addEventListener('click', () => UI.userCard(uid, { serverId: sid }));
     });
   }
   $('memSearch').oninput = () => loadMembers();
@@ -238,7 +323,7 @@
       <div class="modal-head"><h3>Assign roles</h3><button class="x-btn" data-c><i class="fa-solid fa-xmark"></i></button></div>
       <div class="modal-body">${roleCache.filter((r) => !r.is_default).map((r) => `
         <label class="perm"><input type="checkbox" data-r="${r.id}" ${owned.has(r.id) ? 'checked' : ''}>
-        <span class="chip"><span class="dot" style="background:${UI.esc(r.color)}"></span>${UI.esc(r.name)}</span></label>`).join('')
+        <span class="chip">${UI.roleIcon(r)}<span class="dot" style="background:${UI.esc(r.color)}"></span>${UI.esc(r.name)}</span></label>`).join('')
         || '<p style="font-size:13px;color:var(--txt-3);margin:0;">Create a role first.</p>'}</div>
       <div class="modal-foot"><button class="btn btn-quiet" data-c>Cancel</button><button class="btn btn-primary" data-ok>Apply</button></div>
     </div>`;
