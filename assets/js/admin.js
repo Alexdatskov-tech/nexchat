@@ -26,7 +26,7 @@
       const tag = r.status === 'pending' ? '' :
         `<span class="badge ${r.status === 'approved' ? 'badge-admin' : 'badge-owner'}">${r.status}</span>`;
       return `<div class="lrow" data-id="${r.id}" data-u="${r.user_id}">
-        ${UI.avatar(p, 32)}
+        ${UI.avatar(p, 32, { presence: true })}
         <div class="lmain">
           <b>${UI.esc(p.display_name || p.username)} ${tag}</b>
           <small>${UI.esc(r.message || 'No message')} · ${new Date(r.created_at).toLocaleDateString()}</small>
@@ -70,7 +70,7 @@
     const rows = users.filter((u) => !q || u.username.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q));
     $('userRows').innerHTML = rows.map((u) => `
       <div class="lrow" data-u="${u.id}">
-        ${UI.avatar(u, 32)}
+        ${UI.avatar(u, 32, { presence: true })}
         <div class="lmain">
           <b>${UI.esc(u.display_name || u.username)}
             ${u.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}

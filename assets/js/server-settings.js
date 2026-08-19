@@ -282,7 +282,7 @@
       const theirs = memberRoles.filter((x) => x.user_id === m.user_id)
         .map((x) => roleCache.find((r) => r.id === x.role_id)).filter(Boolean);
       return `<div class="lrow" data-u="${m.user_id}">
-        ${UI.avatar(p, 32)}
+        ${UI.avatar(p, 32, { presence: true })}
         <div class="lmain">
           <b>${UI.esc(p.display_name || p.username)} ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}</b>
           <small>@${UI.esc(p.username)}</small>
@@ -377,7 +377,7 @@
     $('banRows').innerHTML = (data || []).map((b) => {
       const p = b.profiles || { username: 'unknown' };
       return `<div class="lrow" data-u="${b.user_id}">
-        ${UI.avatar(p, 32)}
+        ${UI.avatar(p, 32, { presence: true })}
         <div class="lmain"><b>${UI.esc(p.display_name || p.username)}</b><small>${UI.esc(b.reason || 'No reason given')}</small></div>
         <div class="lacts"><button class="btn btn-quiet btn-sm b-un">Unban</button></div>
       </div>`;

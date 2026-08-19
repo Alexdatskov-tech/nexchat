@@ -25,6 +25,11 @@ window.UI = (function () {
   // Renders an avatar, wrapping it in the animated halo for Nitro members.
   function avatar(profile, size, opts) {
     const o = opts || {};
+    // Wrap with a presence dot when asked and we know who this is.
+    if (o.presence && profile?.id && window.Presence) {
+      const inner = avatar(profile, size, { ...o, presence: false });
+      return `<span class="av-slot">${inner}${window.Presence.dot(profile.id)}</span>`;
+    }
     const name = profile?.display_name || profile?.username || '?';
     const bg = profile?.accent_color && !profile?.avatar_url ? `background:${profile.accent_color};` : '';
     const inner = profile?.avatar_url
@@ -183,6 +188,10 @@ window.UI = (function () {
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
           ${p.is_platform_admin ? '<span class="badge badge-admin">Admin</span>' : ''}</h3>
         <div class="handle">@${esc(p.username)}</div>
+        <div class="presence-line" style="margin-top:6px;color:${window.Presence?.isOnline(p.id) ? 'var(--accent)' : 'var(--txt-3)'}">
+          <span class="pdot ${window.Presence?.isOnline(p.id) ? 'on' : 'off'}" data-pd="${p.id}"></span>
+          ${window.Presence?.isOnline(p.id) ? 'Online' : 'Offline'}
+        </div>
         ${p.custom_status ? `<div class="sect"><h5>Status</h5><p>${esc(p.custom_status)}</p></div>` : ''}
         <div class="sect"><h5>About me</h5><p>${p.bio ? esc(p.bio) : '<span style="color:var(--txt-3)">Nothing here yet.</span>'}</p></div>
         ${roleChips}

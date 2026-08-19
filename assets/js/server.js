@@ -115,7 +115,7 @@
     const mine = m.author_id === me.id;
     const left = grouped
       ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
-      : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
+      : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38, { presence: true })}</div>`;
     const head = grouped ? '' :
       `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
        ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
@@ -382,6 +382,15 @@
           .select('*').eq('message_id', m.id).order('position', { ascending: true });
         if (!aa) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', m.id));
         if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
+        // Re-check briefly: uploads finish after the message row is written.
+        [600, 1800, 4000].forEach((d) => setTimeout(async () => {
+          if (!document.querySelector(`.m[data-id="${m.id}"]`)) return;
+          const { data: later } = await window.db.from('message_attachments')
+            .select('*').eq('message_id', m.id).order('position', { ascending: true });
+          if (later && later.length !== (attCache[m.id] || []).length) {
+            attCache[m.id] = later; paintAtts(m.id);
+          }
+        }, d));
         if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
@@ -406,6 +415,25 @@
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, (p) => {
         if (!document.querySelector(`.m[data-id="${p.old.message_id}"]`)) return;
         dropRx(p.old.message_id, p.old.emoji, p.old.user_id); repaintRx(p.old.message_id);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_attachments' }, async (p) => {
+        const a = p.new;
+        // Attachments are written after their message, so the message's own
+        // INSERT event fires before any file rows exist. Listen for them too.
+        if (!document.querySelector(`.m[data-id="${a.message_id}"]`)) return;
+        const list = attCache[a.message_id] || [];
+        if (list.some((x) => x.id === a.id)) return;
+        list.push(a);
+        list.sort((x, y) => (x.position ?? 0) - (y.position ?? 0)
+          || new Date(x.created_at) - new Date(y.created_at));
+        attCache[a.message_id] = list;
+        paintAtts(a.message_id);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_attachments' }, (p) => {
+        const mid = Object.keys(attCache).find((k) => (attCache[k] || []).some((x) => x.id === p.old.id));
+        if (!mid) return;
+        attCache[mid] = attCache[mid].filter((x) => x.id !== p.old.id);
+        paintAtts(mid);
       })
       .subscribe();
   }
@@ -858,7 +886,7 @@
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
 
-    $('meAv').innerHTML = UI.avatar(me, 28);
+    $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
 

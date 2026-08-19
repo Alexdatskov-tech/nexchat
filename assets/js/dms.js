@@ -79,7 +79,7 @@
     if (c.is_group) {
       return `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * .4)}px;background:var(--bg-4);color:var(--txt-1)"><i class="fa-solid fa-user-group" style="font-size:${Math.round(size*.36)}px"></i></div>`;
     }
-    return UI.avatar(c.people[0] || { username: '?' }, size);
+    return UI.avatar(c.people[0] || { username: '?' }, size, { presence: true });
   }
 
   function paintList() {
@@ -104,7 +104,7 @@
       const rows = friends.filter((f) => !q || (f.display_name || f.username).toLowerCase().includes(q));
       box.innerHTML = rows.length ? rows.map((f) => `
         <div class="dm-item" data-u="${f.id}">
-          ${UI.avatar(f, 34)}
+          ${UI.avatar(f, 34, { presence: true })}
           <div class="nm"><b>${MD.esc(f.display_name || f.username)}</b><small>@${MD.esc(f.username)}</small></div>
           <button class="btn btn-quiet btn-sm" data-call="${f.id}" title="Call"><i class="fa-solid fa-phone"></i></button>
           <button class="btn btn-quiet btn-sm" data-msg="${f.id}" title="Message"><i class="fa-solid fa-paper-plane"></i></button>
@@ -193,7 +193,15 @@
     paintList();
     $('convAv').innerHTML = convAvatar(c, 28);
     $('convName').textContent = convTitle(c);
-    $('convSub').textContent = c.is_group ? `${c.people.length + 1} members` : '@' + (c.people[0]?.username || '');
+    if (c.is_group) {
+      $('convSub').textContent = `${c.people.length + 1} members`;
+    } else {
+      const o = c.people[0];
+      const on = o && window.Presence?.isOnline(o.id);
+      $('convSub').innerHTML = `<span class="presence-line" style="color:${on ? 'var(--accent)' : 'var(--txt-3)'}">
+        <span class="pdot ${on ? 'on' : 'off'}" data-pd="${o?.id || ''}"></span>${on ? 'Online' : 'Offline'}</span>
+        <span style="color:var(--txt-3)"> · @${MD.esc(o?.username || '')}</span>`;
+    }
     $('convSub').classList.remove('hidden');
     $('btnConvInfo').classList.remove('hidden');
     $('btnCall').classList.remove('hidden');
@@ -395,6 +403,15 @@
           .select('*').eq('message_id', m.id).order('position', { ascending: true });
         if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').eq('message_id', m.id));
         if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
+        // Re-check briefly: uploads finish after the message row is written.
+        [600, 1800, 4000].forEach((d) => setTimeout(async () => {
+          if (!document.querySelector(`.m[data-id="${m.id}"]`)) return;
+          const { data: later } = await window.db.from('dm_message_attachments')
+            .select('*').eq('message_id', m.id).order('position', { ascending: true });
+          if (later && later.length !== (attCache[m.id] || []).length) {
+            attCache[m.id] = later; paintAtts(m.id);
+          }
+        }, d));
         if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, (p) => {
@@ -408,6 +425,25 @@
         document.querySelector(`.m[data-id="${p.old.id}"]`)?.remove();
         delete attCache[p.old.id];
         regroup();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_message_attachments' }, async (p) => {
+        const a = p.new;
+        // Attachments are written after their message, so the message's own
+        // INSERT event fires before any file rows exist. Listen for them too.
+        if (!document.querySelector(`.m[data-id="${a.message_id}"]`)) return;
+        const list = attCache[a.message_id] || [];
+        if (list.some((x) => x.id === a.id)) return;
+        list.push(a);
+        list.sort((x, y) => (x.position ?? 0) - (y.position ?? 0)
+          || new Date(x.created_at) - new Date(y.created_at));
+        attCache[a.message_id] = list;
+        paintAtts(a.message_id);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'dm_message_attachments' }, (p) => {
+        const mid = Object.keys(attCache).find((k) => (attCache[k] || []).some((x) => x.id === p.old.id));
+        if (!mid) return;
+        attCache[mid] = attCache[mid].filter((x) => x.id !== p.old.id);
+        paintAtts(mid);
       })
       .subscribe();
   }
@@ -678,7 +714,11 @@
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
-    if (me) window.Notify?.start(me);
+    if (me) {
+      window.Notify?.start(me);
+      window.Presence?.start(me);
+      window.Presence?.onChange(() => { window.Presence.refreshDots(); if (tab === 'friends') paintList(); });
+    }
     profiles[me.id] = me;
     $('meAv').innerHTML = UI.avatar(me, 28);
     $('meName').textContent = me.display_name || me.username;

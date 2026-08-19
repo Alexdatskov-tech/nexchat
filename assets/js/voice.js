@@ -9,7 +9,7 @@ window.Voice = (function () {
   const members = new Map();        // uid -> profile + flags
   let me = null, chan = null, srvId = null;
   let muted = false, deaf = false, cam = false, sharing = false;
-  let targetFps = 60;
+  let targetFps = 60, tick4 = 0;
   let onChange = () => {}, onSpeak = () => {}, onStats = () => {};
   let actx = null, rafId = null, statTimer = null;
   const meters = new Map();
@@ -151,8 +151,11 @@ window.Voice = (function () {
     if (!sender) return;
     try {
       const p = sender.getParameters();
-      p.degradationPreference = 'maintain-framerate';
+      // maintain-resolution: hold the picture size and let fps absorb the hit,
+      // rather than silently dropping to 480p to chase a frame count.
+      p.degradationPreference = 'maintain-resolution';
       p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
+      p.encodings[0].scaleResolutionDownBy = 1;
       p.encodings[0].maxFramerate = fps;
       p.encodings[0].maxBitrate = kbps * 1000;
       p.encodings[0].networkPriority = 'high';
@@ -468,7 +471,8 @@ window.Voice = (function () {
     });
 
     statTimer = setInterval(() => {
-      pollStats().then(() => autoTune(stats.fps));
+      pollStats();
+      if (++tick4 % 5 === 0) autoTune();   // re-assert every 5s, not every tick
       // Some browsers fire mute/unmute inconsistently, so re-derive each tick.
       let changed = false;
       peers.forEach((rec) => { if (rebuildVideo(rec)) changed = true; });
@@ -529,11 +533,12 @@ window.Voice = (function () {
       try {
         const s = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            // min forces the browser to pick a 30fps-capable mode rather than
-            // settling on whatever the sensor defaults to.
-            frameRate: { min: 24, ideal: 60 },
+            // Pinned to 720p. Resolution is held no matter what, and framerate
+            // is what gives if the link or CPU can't keep up.
+            width: { min: 1280, ideal: 1280, max: 1280 },
+            height: { min: 720, ideal: 720, max: 720 },
+            frameRate: { ideal: 60 },
+            resizeMode: 'crop-and-scale',
           },
         });
         camTrack = s.getVideoTracks()[0];
@@ -628,38 +633,14 @@ window.Voice = (function () {
     return s && s.getVideoTracks().some((t) => t.readyState === 'live') ? s : null;
   };
 
-  /* Watches delivered framerate and eases resolution down (never framerate)
-     when the encoder can't keep up, then walks it back once things settle. */
-  let scaleDown = 1, lowStreak = 0, goodStreak = 0;
-  async function autoTune(fps) {
-    if (!cam && !sharing) { scaleDown = 1; lowStreak = goodStreak = 0; return; }
-    if (!fps) return;
-    const target = targetFps;
-
-    if (fps < target * 0.7) { lowStreak++; goodStreak = 0; } 
-    else if (fps > target * 0.9) { goodStreak++; lowStreak = 0; }
-    else { lowStreak = goodStreak = 0; }
-
-    let next = scaleDown;
-    if (lowStreak >= 4 && scaleDown < 4) next = Math.min(4, scaleDown * 1.5);
-    else if (goodStreak >= 12 && scaleDown > 1) next = Math.max(1, scaleDown / 1.5);
-    if (next === scaleDown) return;
-
-    scaleDown = next; lowStreak = goodStreak = 0;
-    const apply = async (sender) => {
-      if (!sender) return;
-      try {
-        const p = sender.getParameters();
-        p.degradationPreference = 'maintain-framerate';
-        p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-        p.encodings[0].scaleResolutionDownBy = scaleDown;
-        p.encodings[0].maxFramerate = target;
-        await sender.setParameters(p);
-      } catch {}
-    };
-    for (const rec of peers.values()) if (cam) await apply(rec.tx.cam?.sender);
+  /* Resolution is fixed, so there's nothing to scale — this just re-asserts
+     the encoder settings in case the browser quietly reset them. */
+  async function autoTune() {
+    if (!cam && !sharing) return;
+    for (const rec of peers.values()) if (cam) await tuneSender(rec.tx.cam?.sender, targetFps, 4000);
     for (const rec of scrOut.values()) {
-      await apply(rec.pc.getSenders().find((s) => s.track && s.track.kind === 'video'));
+      await tuneSender(rec.pc.getSenders().find((s) => s.track && s.track.kind === 'video'),
+                       targetFps, screenQuality.kbps);
     }
   }
 
