@@ -131,12 +131,36 @@ ok('no duplicate .surface frosted rules', trio.length <= 1, `${trio.length} rule
   ok('has-bg does not style a non-existent .ch-item', !/\.ch-item/.test(bare));
   ok('has-bg styles .dm-item rows', /body\.has-bg\s+\.dm-item/.test(bare));
 
-  // Scroll tearing came from blurring a scrolling layer; the chat shell rules
-  // must stay flat-alpha.
+  // Scroll tearing came from blurring a layer that MOVES -- a backdrop-filter
+  // on or inside a scroll container has to re-sample every frame. The elements
+  // that actually scroll are .msgs, .chan-list and .dm-list; those, and the row
+  // classes painted inside them, must stay flat-alpha. A static underlay over
+  // the fixed wallpaper is fine and is blurred once by the compositor.
+  const SCROLLERS = ['msgs', 'chan-list', 'dm-list', 'chan', 'dm-item', 'm'];
   const shellRules = bare.match(/body\.has-bg\s+\.(shell|chat|rail|dm-rail|msgs|composer-inner|chan|dm-item)[^{]*\{[^}]*\}/g) || [];
   ok('chat-shell rules exist', shellRules.length >= 5, `${shellRules.length} rules`);
-  ok('  and none of them blur a scrolling layer',
-     !shellRules.some((r) => /backdrop-filter/.test(r)));
+
+  const blurredScrollers = shellRules.filter((r) => {
+    if (!/backdrop-filter/.test(r)) return false;
+    const sel = r.slice(0, r.indexOf('{'));
+    return SCROLLERS.some((c) => new RegExp(`\\.${c}\\b`).test(sel));
+  });
+  ok('  no scrolling layer is blurred', blurredScrollers.length === 0,
+     blurredScrollers.map((r) => r.split('{')[0].trim()).join(' | '));
+
+  // The chat underlay: allowed to blur, but only as a static, non-scrolling box.
+  const underlay = (bare.match(/body\.has-bg\s+\.chat::before\s*\{[^}]*\}/) || [])[0];
+  if (underlay) {
+    ok('chat underlay is absolutely positioned', /position:\s*absolute/.test(underlay));
+    ok('  sits behind the messages', /z-index:\s*-1/.test(underlay));
+    ok('  does not eat clicks', /pointer-events:\s*none/.test(underlay));
+    ok('  dims as well as blurs', /background:\s*rgba/.test(underlay));
+    ok('  has a -webkit- fallback', /-webkit-backdrop-filter/.test(underlay));
+    ok('  .chat owns the stacking context',
+       /body\.has-bg\s+\.chat\s*\{[^}]*position:\s*relative[^}]*\}/.test(bare));
+    ok('  .chat is not itself a scroll container',
+       !/body\.has-bg\s+\.chat\s*\{[^}]*overflow[^}]*\}/.test(bare));
+  }
 
   // Text over a photo needs a shadow to stay readable.
   ok('message text gets a shadow over a wallpaper',

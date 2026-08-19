@@ -1108,7 +1108,28 @@ body.has-bg::before { filter: brightness(var(--dash-bright, 1)); }
    them every frame is exactly the tearing that was just fixed.
    ---------------------------------------------------------------------------- */
 body.has-bg .shell { background: transparent; }
-body.has-bg .chat { background: transparent; }
+
+/* The chat column gets its own treatment: the wallpaper behind the messages is
+   pushed further back with extra blur and an extra dim, so text stays readable
+   over a busy photo while the rails and the rest of the page still show it off.
+
+   This is the one place a backdrop-filter is justified. The rule that keeps the
+   scroll smooth is not "never blur", it is "never blur something that moves":
+   this underlay is a static, non-scrolling box, and its backdrop is the fixed
+   wallpaper layer, which also never moves. The compositor blurs it once and
+   caches it. `.msgs` scrolls in a layer painted above and never re-triggers it.
+   That is the same reasoning that lets `.topbar` keep its blur.
+
+   z-index -1 inside a `.chat` stacking context puts it under the messages but
+   above the page background, so nothing else has to be re-stacked. Without
+   backdrop-filter support the dim still lands, which degrades cleanly. */
+body.has-bg .chat { background: transparent; position: relative; z-index: 0; }
+body.has-bg .chat::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: rgba(13, 12, 15, var(--chat-dim, .42));
+  -webkit-backdrop-filter: blur(var(--chat-blur, 22px));
+  backdrop-filter: blur(var(--chat-blur, 22px));
+}
 body.has-bg .rail,
 body.has-bg .dm-rail { background: rgba(19, 18, 23, .72); border-right-color: rgba(255,255,255,.10); }
 body.has-bg .chat-head { background: rgba(13, 12, 15, .58); border-bottom-color: rgba(255,255,255,.10); }
