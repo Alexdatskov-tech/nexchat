@@ -209,8 +209,10 @@
     msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
 
     if (msgs.length) {
-      const { data: aa } = await window.db.from('dm_message_attachments')
+      let { data: aa } = await window.db.from('dm_message_attachments')
         .select('*').in('message_id', msgs.map((m) => m.id)).order('position', { ascending: true });
+      if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments')
+        .select('*').in('message_id', msgs.map((m) => m.id)));
       Object.keys(attCache).forEach((k) => delete attCache[k]);
       (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
     }
@@ -291,8 +293,9 @@
         const last = box.querySelector('.m:last-of-type');
         box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
         wire(box.lastElementChild);
-        const { data: aa } = await window.db.from('dm_message_attachments')
+        let { data: aa } = await window.db.from('dm_message_attachments')
           .select('*').eq('message_id', m.id).order('position', { ascending: true });
+        if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').eq('message_id', m.id));
         if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
         if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
@@ -348,22 +351,35 @@
       if (files.length) {
         const bar = $('upbar'); bar.classList.remove('hidden');
         const fill = bar.querySelector('i');
+        let ok = 0;
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
           try {
             const key = `nexchat/dm/${active.id}/${Date.now()}-${i}-${f.name.replace(/[^\w.\-]/g, '_')}`;
             const up = await S3().put(key, f);
-            // `position` preserves the exact order they were attached.
-            await window.db.from('dm_message_attachments').insert({
+            const rowBase = {
               message_id: msg.id, url: up.url, file_name: f.name,
-              file_size: f.size, mime_type: up.type, position: i,
-            });
+              file_size: f.size, mime_type: up.type,
+            };
+            let { error: aErr } = await window.db.from('dm_message_attachments')
+              .insert({ ...rowBase, position: i });
+            if (aErr && /position/i.test(aErr.message || '')) {
+              ({ error: aErr } = await window.db.from('dm_message_attachments').insert(rowBase));
+            }
+            if (aErr) throw new Error(aErr.message);
+            ok++;
           } catch (err) { UI.toast(`${f.name}: ${err.message}`, true); }
           fill.style.width = Math.round(((i + 1) / files.length) * 100) + '%';
         }
         setTimeout(() => { bar.classList.add('hidden'); fill.style.width = '0'; }, 400);
-        const { data: aa } = await window.db.from('dm_message_attachments')
+        if (!ok && !v) {
+          await window.db.from('dm_messages').delete().eq('id', msg.id);
+          document.querySelector(`.m[data-id="${msg.id}"]`)?.remove();
+          return;
+        }
+        let { data: aa } = await window.db.from('dm_message_attachments')
           .select('*').eq('message_id', msg.id).order('position', { ascending: true });
+        if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').eq('message_id', msg.id));
         attCache[msg.id] = aa || [];
         paintAtts(msg.id);
       }

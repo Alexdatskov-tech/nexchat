@@ -161,10 +161,15 @@
     Object.keys(rx).forEach((k) => delete rx[k]);
     if (msgs.length) {
       const ids = msgs.map((m) => m.id);
-      const [{ data: rr }, { data: aa }] = await Promise.all([
+      const [{ data: rr }, attRes] = await Promise.all([
         window.db.from('message_reactions').select('*').in('message_id', ids),
         window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
       ]);
+      let aa = attRes.data;
+      if (attRes.error) {
+        ({ data: aa } = await window.db.from('message_attachments')
+          .select('*').in('message_id', ids).order('created_at', { ascending: true }));
+      }
       (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
       (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
     }
@@ -309,8 +314,9 @@
         box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
         const el = box.lastElementChild;
         wire(el);
-        const { data: aa } = await window.db.from('message_attachments')
+        let { data: aa } = await window.db.from('message_attachments')
           .select('*').eq('message_id', m.id).order('position', { ascending: true });
+        if (!aa) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', m.id));
         if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
         if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
       })
@@ -385,7 +391,7 @@
       if (files.length) {
         const bar = $('upbar'); bar.classList.remove('hidden');
         const fill = bar.querySelector('i');
-        let done = 0;
+        let done = 0, ok = 0;
         for (const f of files) {
           try {
             const key = `nexchat/${serverId}/${active.id}/${Date.now()}-${f.name.replace(/[^\w.\-]/g, '_')}`;
@@ -394,18 +400,35 @@
             });
             // position preserves the order files were attached, so an
             // image/pdf/image sequence stays image, pdf, image.
-            await window.db.from('message_attachments').insert({
+            const rowBase = {
               message_id: msg.id, url: up.url, file_name: f.name,
-              file_size: f.size, mime_type: up.type, position: files.indexOf(f),
-            });
+              file_size: f.size, mime_type: up.type,
+            };
+            // `position` keeps the exact send order. It only exists once
+            // patch 3 has been applied, so fall back gracefully without it.
+            let { error: aErr } = await window.db.from('message_attachments')
+              .insert({ ...rowBase, position: files.indexOf(f) });
+            if (aErr && /position/i.test(aErr.message || '')) {
+              ({ error: aErr } = await window.db.from('message_attachments').insert(rowBase));
+            }
+            if (aErr) throw new Error(aErr.message);
+            ok++;
           } catch (err) { UI.toast(`${f.name}: ${err.message}`, true); }
           done++;
           fill.style.width = Math.round((done / files.length) * 100) + '%';
         }
         setTimeout(() => { bar.classList.add('hidden'); fill.style.width = '0'; }, 400);
 
-        const { data: aa } = await window.db.from('message_attachments')
+        // Nothing attached and nothing typed leaves an empty bubble — clean it up.
+        if (!ok && !v) {
+          await window.db.from('messages').delete().eq('id', msg.id);
+          document.querySelector(`.m[data-id="${msg.id}"]`)?.remove();
+          return;
+        }
+
+        let { data: aa } = await window.db.from('message_attachments')
           .select('*').eq('message_id', msg.id).order('position', { ascending: true });
+        if (!aa) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', msg.id));
         attCache[msg.id] = aa || [];
         paintAtts(msg.id);
       }
