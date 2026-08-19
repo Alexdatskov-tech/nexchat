@@ -57,11 +57,27 @@
     });
   }
 
-  async function loadAppeals() {
+  async function loadAppeals({ quiet = false } = {}) {
     const { data, error } = await window.db.from('ban_appeals')
       .select('*, profiles!user_id(username,display_name,avatar_url,accent_color,is_banned)')
       .order('created_at', { ascending: false });
-    if (error) return UI.toast(error.message, true);
+
+    if (error) {
+      // The appeals table arrives with a migration that may not have been run
+      // yet. Say so in the pane rather than nagging from whichever tab is open.
+      const missing = error.code === 'PGRST205' || /schema cache|does not exist/i.test(error.message || '');
+      $('appealCount').innerHTML = '';
+      if (missing) {
+        $('appealRows').innerHTML = `<div class="empty"><div class="ico"><i class="fa-solid fa-database"></i></div>
+          <h3>Appeals aren't set up yet</h3>
+          <p>Run <code>nexchat_patch6.sql</code> in the Supabase SQL editor to create the appeals table.</p></div>`;
+        return;
+      }
+      $('appealRows').innerHTML = `<div class="empty"><div class="ico"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h3>Couldn't load appeals</h3><p>${UI.esc(error.message || 'Unknown error')}</p></div>`;
+      if (!quiet) UI.toast(error.message, true);
+      return;
+    }
 
     const pending = (data || []).filter((a) => a.status === 'pending');
     $('appealCount').innerHTML = pending.length
@@ -160,6 +176,6 @@
     window.Presence?.onChange(() => window.Presence.refreshDots());
     $('wrap').classList.remove('hidden');
     loadRequests();
-    loadAppeals();
+    loadAppeals({ quiet: true });
   })();
 })();

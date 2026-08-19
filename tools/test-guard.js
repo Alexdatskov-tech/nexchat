@@ -287,7 +287,32 @@ function harness({ banned = false, reason = null } = {}) {
     ok('patch6 unbans on acceptance', /set is_banned = false/.test(sql));
   }
 
-  /* ---- 16. ban screen styling exists ---- */
+  /* ---- 16. the migration not being run yet is handled kindly ---- */
+  {
+    const { w, state } = harness();
+    w.Guard.start({ id: 'u9', is_banned: true, ban_reason: 'Spam' });
+    await tick(30);
+    const ov = w.document.querySelector('.ban-screen');
+    state.insertError = { code: 'PGRST205', message: "Could not find the table 'public.ban_appeals' in the schema cache" };
+    ov.querySelector('#banAppeal').onclick();
+    ov.querySelector('#banMsg').value = 'This ban seems wrong, please take another look.';
+    await ov.querySelector('#banForm').onsubmit({ preventDefault() {} });
+    await tick(30);
+    const txt = ov.querySelector('#banNote').textContent;
+    ok('a missing table is explained in plain words', /contact an administrator/i.test(txt));
+    ok('  no schema-cache jargon leaks to the user', !/schema cache|PGRST/i.test(txt));
+  }
+
+  /* ---- 17. admin degrades instead of nagging ---- */
+  {
+    const adminJs = fs.readFileSync(path.join(APP, 'assets/js/admin.js'), 'utf8');
+    ok('admin detects a missing appeals table', /PGRST205|schema cache/.test(adminJs));
+    ok('  bootstrap load is quiet', /loadAppeals\(\{\s*quiet:\s*true\s*\}\)/.test(adminJs));
+    ok('  and points at the migration', /nexchat_patch6\.sql/.test(adminJs));
+    ok('  errors still render in the pane', /Couldn't load appeals|Couldn&#39;t load appeals/.test(adminJs));
+  }
+
+  /* ---- 18. ban screen styling exists ---- */
   const css = fs.readFileSync(path.join(APP, 'assets/css/theme.css'), 'utf8');
   for (const sel of ['.ban-screen', '.ban-card', '.ban-title', '.ban-reason', '.ban-btn', '.is-banned',
                      '.ban-appeal', '.ban-acts', '.ban-btn-quiet', '.appeal-msg']) {

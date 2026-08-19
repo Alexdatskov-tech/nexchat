@@ -127,8 +127,11 @@ window.Guard = (function () {
       } catch (err) {
         // The partial unique index is what enforces one open appeal per user.
         const dupe = /duplicate key|unique/i.test(err.message || '');
+        // Postgres jargon is no use to a banned user; translate what we can.
+        const missing = err.code === 'PGRST205' || /schema cache|does not exist/i.test(err.message || '');
         say(dupe ? 'You already have an appeal waiting to be reviewed.'
-                 : (err.message || 'Could not submit that appeal.'), true);
+          : missing ? 'Appeals aren\u2019t available right now. Please contact an administrator directly.'
+          : (err.message || 'Could not submit that appeal.'), true);
         send.disabled = false;
         send.textContent = 'Submit appeal';
       }
