@@ -1,5 +1,5 @@
 -- =============================================================================
--- NEXCHAT — PATCH 3 (DMs, friends, role icons, attachment ordering)
+-- NEXCHAT - PATCH 3 (DMs, friends, role icons, attachment ordering)
 -- Run once in Supabase -> SQL Editor. Safe to re-run.
 -- Run nexchat_rls_fix.sql first if you haven't.
 -- =============================================================================

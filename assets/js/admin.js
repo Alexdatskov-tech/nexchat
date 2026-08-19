@@ -127,6 +127,18 @@
     paintUsers();
   }
 
+  // The rpc raises plain-language exceptions; surface those as-is and only
+  // fall back to the raw message for anything unexpected.
+  function adminErr(error) {
+    const m = error?.message || '';
+    if (/schema cache|does not exist|PGRST205/i.test(m) || error?.code === 'PGRST202') {
+      return 'Admin promotion isn\u2019t set up yet - run nexchat_patch7.sql.';
+    }
+    const known = ['not authorised', 'no such user', 'at least one admin', 'your own admin access'];
+    const hit = known.find((k) => m.toLowerCase().includes(k));
+    return hit ? m.replace(/^.*?:\s*/, '') : (m || 'Could not change admin access.');
+  }
+
   function paintUsers() {
     const q = $('uSearch').value.trim().toLowerCase();
     const rows = users.filter((u) => !q || u.username.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q));
@@ -143,9 +155,32 @@
         </div>
         ${u.id === me.id ? '<span class="badge badge-owner">You</span>' : `
         <div class="lacts">
+          <button class="btn btn-quiet btn-sm u-admin">${u.is_platform_admin ? 'Remove admin' : 'Make admin'}</button>
           <button class="btn btn-quiet btn-sm u-ban" style="${u.is_banned ? '' : 'color:#FF8085;'}">${u.is_banned ? 'Unban' : 'Ban'}</button>
         </div>`}
       </div>`).join('') || '<div class="empty"><p>No one matches that.</p></div>';
+
+    $('userRows').querySelectorAll('.u-admin').forEach((btn) => {
+      btn.onclick = async () => {
+        const uid = btn.closest('.lrow').dataset.u;
+        const u = users.find((x) => x.id === uid);
+        const promoting = !u.is_platform_admin;
+        const okd = await UI.confirmDialog(
+          promoting ? 'Make admin' : 'Remove admin',
+          promoting
+            ? `${u.username} will be able to ban accounts, review appeals and promote other admins.`
+            : `${u.username} will lose access to the admin panel.`,
+          !promoting, promoting ? 'Make admin' : 'Remove admin');
+        if (!okd) return;
+        btn.disabled = true;
+        const { error } = await window.db.rpc('set_user_admin', { p_user_id: uid, p_admin: promoting });
+        btn.disabled = false;
+        if (error) return UI.toast(adminErr(error), true);
+        u.is_platform_admin = promoting;
+        UI.toast(promoting ? `${u.username} is now an admin.` : `${u.username} is no longer an admin.`);
+        paintUsers();
+      };
+    });
 
     $('userRows').querySelectorAll('.u-ban').forEach((btn) => {
       btn.onclick = async () => {
@@ -153,7 +188,7 @@
         const u = users.find((x) => x.id === uid);
         let reason = null;
         if (!u.is_banned) {
-          if (!await UI.confirmDialog('Ban account', `${u.username} will be locked out of NexChat entirely.`, true)) return;
+          if (!await UI.confirmDialog('Ban account', `${u.username} will be locked out of NexChat entirely.`, true, 'Ban account')) return;
           reason = prompt('Reason (optional)') || null;
         }
         const { error } = await window.db.rpc('set_user_ban', { p_user_id: uid, p_banned: !u.is_banned, p_reason: reason });

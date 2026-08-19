@@ -1,5 +1,5 @@
 -- =============================================================================
--- NEXCHAT — PATCH 5
+-- NEXCHAT - PATCH 5
 -- Publishes the reaction tables to Realtime so reactions appear for everyone
 -- instantly, instead of only after a refresh.
 --
@@ -21,3 +21,17 @@ do $$ begin alter publication supabase_realtime add table public.dm_message_reac
 
 alter table public.message_reactions    replica identity full;
 alter table public.dm_message_reactions replica identity full;
+
+-- -----------------------------------------------------------------------------
+-- Verification
+--   Runs last, so it only reports if the whole file arrived. Both columns must
+--   come back true; if this query does not appear in the results at all, the
+--   paste was truncated and the patch should be re-run from the top.
+-- -----------------------------------------------------------------------------
+select
+  exists (select 1 from pg_publication_tables
+           where pubname = 'supabase_realtime'
+             and schemaname = 'public' and tablename = 'message_reactions')    as reactions_realtime,
+  exists (select 1 from pg_publication_tables
+           where pubname = 'supabase_realtime'
+             and schemaname = 'public' and tablename = 'dm_message_reactions') as dm_reactions_realtime;

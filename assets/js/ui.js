@@ -153,7 +153,9 @@ window.UI = (function () {
     return data.publicUrl;
   }
 
-  function confirmDialog(title, body, danger) {
+  // `confirm` overrides the action button's label; without it a dangerous
+  // action reads "Delete", which is wrong for anything that is not a deletion.
+  function confirmDialog(title, body, danger, confirmText) {
     return new Promise((resolve) => {
       const ov = document.createElement('div');
       ov.className = 'overlay';
@@ -163,7 +165,7 @@ window.UI = (function () {
           <div class="modal-body"><p style="font-size:13.5px;color:var(--txt-2);margin:0;">${esc(body)}</p></div>
           <div class="modal-foot">
             <button class="btn btn-quiet" data-no>Cancel</button>
-            <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${danger ? 'Delete' : 'Confirm'}</button>
+            <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${esc(confirmText || (danger ? 'Delete' : 'Confirm'))}</button>
           </div>
         </div>`;
       document.body.appendChild(ov);

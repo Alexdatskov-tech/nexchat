@@ -1,9 +1,9 @@
 -- =============================================================================
--- NEXCHAT — PATCH 6
+-- NEXCHAT - PATCH 6
 -- Ban appeals, plus the Realtime publication entry that makes a ban land
 -- instantly on an already-signed-in session.
 --
--- Run once in Supabase -> SQL Editor. Safe to re-run.
+-- Run once in the Supabase SQL Editor. Safe to re-run.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -108,3 +108,22 @@ $$;
 
 revoke all on function public.resolve_ban_appeal(uuid, boolean, text) from public;
 grant execute on function public.resolve_ban_appeal(uuid, boolean, text) to authenticated;
+
+-- -----------------------------------------------------------------------------
+-- Verification
+--   Runs last, so it only reports if the whole file arrived. A truncated paste
+--   is the likeliest failure here -- if this final query does not appear in the
+--   results, the patch did not finish and should be re-run from the top.
+-- -----------------------------------------------------------------------------
+select
+  to_regclass('public.ban_appeals')                              is not null as ban_appeals_table,
+  to_regproc('public.resolve_ban_appeal(uuid,boolean,text)')     is not null as resolve_function,
+  exists (select 1 from pg_publication_tables
+           where pubname = 'supabase_realtime'
+             and schemaname = 'public' and tablename = 'profiles')          as profiles_realtime,
+  exists (select 1 from pg_indexes
+           where schemaname = 'public'
+             and indexname = 'idx_ban_appeals_one_pending')                 as one_pending_index,
+  exists (select 1 from pg_policies
+           where schemaname = 'public' and tablename = 'profiles'
+             and policyname = 'profiles_select_self')                       as self_select_policy;

@@ -1,5 +1,5 @@
 -- =============================================================================
--- NEXCHAT — PATCH 4
+-- NEXCHAT - PATCH 4
 -- Publishes attachment tables to Realtime so files appear the instant they're
 -- uploaded, instead of only after a refresh.
 -- Run once in Supabase -> SQL Editor. Safe to re-run.
