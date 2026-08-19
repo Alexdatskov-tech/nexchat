@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Server settings</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=25" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=26" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=25" />
+<link rel="stylesheet" href="assets/css/theme.css?v=26" />
 </head>
 <body>
 <div class="set-wrap">
@@ -60,6 +60,19 @@
           <input type="color" id="sAccent" />
           <input type="text" id="sAccentHex" class="input mono" style="max-width:130px;" maxlength="7" />
           <button class="btn btn-quiet btn-sm" id="sAccentReset">Reset to default</button>
+        </div>
+      </div>
+
+      <div class="set-block">
+        <h4>Server name</h4>
+        <div class="bsub">Colour and typeface for this server's name in the sidebar and on your server list.</div>
+        <div id="sNamePreview" class="name-preview">Server name</div>
+        <div class="swatches" id="sNameSwatches" style="margin-top:14px;"></div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:16px;flex-wrap:wrap;">
+          <input type="color" id="sNameColor" />
+          <input type="text" id="sNameHex" class="input mono" style="max-width:130px;" maxlength="7" />
+          <select id="sNameFont" class="input" style="max-width:170px;"></select>
+          <button class="btn btn-quiet btn-sm" id="sNameReset">Reset to default</button>
         </div>
       </div>
     </section>
@@ -116,13 +129,13 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=25"></script>
-<script src="assets/js/supabase-client.js?v=25"></script>
-<script src="assets/js/ui.js?v=25"></script>
-<script src="assets/js/md.js?v=25"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=25"></script>
-<script src="assets/js/presence.js?v=25"></script>
-<script src="assets/js/notify.js?v=25"></script>
-<script src="assets/js/server-settings.js?v=25"></script>
+<script src="assets/js/config.js?v=26"></script>
+<script src="assets/js/supabase-client.js?v=26"></script>
+<script src="assets/js/ui.js?v=26"></script>
+<script src="assets/js/md.js?v=26"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=26"></script>
+<script src="assets/js/presence.js?v=26"></script>
+<script src="assets/js/notify.js?v=26"></script>
+<script src="assets/js/server-settings.js?v=26"></script>
 </body>
 </html>

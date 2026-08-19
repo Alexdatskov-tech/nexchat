@@ -24,6 +24,14 @@
     }
   }
 
+  /* Each card carries its own server's name styling, so one global variable
+     cannot be used here the way it is on a single-server page. */
+  function nameStyle(theme) {
+    const col = theme?.name_color;
+    const safe = /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF';
+    return `color:${safe};font-family:${UI.nameFontStack(theme?.name_font)}`;
+  }
+
   function card(s) {
     const count = s.server_members?.[0]?.count ?? 0;
     const owner = s.owner_id === me.id;
@@ -34,7 +42,7 @@
         <div class="scard-banner" style="${bg};background-size:cover;"></div>
         <div class="scard-ico">${ico}</div>
         <div class="scard-body">
-          <div class="scard-name">
+          <div class="scard-name" style="${nameStyle(s.theme)}">
             <span>${UI.esc(s.name)}</span>
             ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}
           </div>

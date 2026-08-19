@@ -42,6 +42,32 @@
   $('sAccentHex').oninput = (e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value.trim())) setAccent(e.target.value.trim()); };
   $('sAccentReset').onclick = () => setAccent('#2FBF87');
 
+  /* ---- server name colour + font ---- */
+  const NAME_PRESETS = ['#FFFFFF', '#EDEBEF', '#2FBF87', '#3B9EF5', '#8B7CF6', '#E8659A', '#E8B04B', '#E5484D'];
+  let nameFont = 'display';
+
+  function setNameColor(hex) {
+    $('sNameColor').value = hex;
+    $('sNameHex').value = hex.toUpperCase();
+    document.documentElement.style.setProperty('--srv-name-color', hex);
+    document.querySelectorAll('#sNameSwatches .swatch').forEach((s) => s.classList.toggle('on', s.dataset.c.toLowerCase() === hex.toLowerCase()));
+  }
+  function setNameFont(key) {
+    nameFont = UI.NAME_FONTS[key] ? key : 'display';
+    $('sNameFont').value = nameFont;
+    document.documentElement.style.setProperty('--srv-name-font', UI.nameFontStack(nameFont));
+  }
+
+  $('sNameSwatches').innerHTML = NAME_PRESETS.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}"></div>`).join('');
+  document.querySelectorAll('#sNameSwatches .swatch').forEach((s) => { s.onclick = () => setNameColor(s.dataset.c); });
+  $('sNameFont').innerHTML = Object.entries(UI.NAME_FONTS)
+    .map(([k, v]) => `<option value="${k}" style="font-family:${v.stack}">${v.label}</option>`).join('');
+  $('sNameColor').oninput = (e) => setNameColor(e.target.value);
+  $('sNameHex').oninput = (e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value.trim())) setNameColor(e.target.value.trim()); };
+  $('sNameFont').onchange = (e) => setNameFont(e.target.value);
+  $('sNameReset').onclick = () => { setNameColor('#FFFFFF'); setNameFont('display'); };
+  $('sName').oninput = (e) => { $('sNamePreview').textContent = e.target.value.trim() || 'Server name'; };
+
   /* ---- uploads ---- */
   function wireUp(inp, prev, cb, maxMb) {
     $(inp).onchange = (e) => {
@@ -62,7 +88,12 @@
       const patch = {
         name: $('sName').value.trim(),
         description: $('sDesc').value.trim() || null,
-        theme: { ...(srv.theme || {}), accent: $('sAccent').value },
+        theme: {
+          ...(srv.theme || {}),
+          accent: $('sAccent').value,
+          name_color: $('sNameColor').value,
+          name_font: nameFont,
+        },
       };
       if (patch.name.length < 2) throw new Error('The server needs a name of at least 2 characters.');
       if (icoFile) patch.icon_url = await UI.upload('server-icons', icoFile, sid);
@@ -413,6 +444,9 @@
       $('banPrev').style.background = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
     }
     setAccent(srv.theme?.accent || '#2FBF87');
+    setNameColor(/^#[0-9a-fA-F]{6}$/.test(srv.theme?.name_color || '') ? srv.theme.name_color : '#FFFFFF');
+    setNameFont(srv.theme?.name_font || 'display');
+    $('sNamePreview').textContent = srv.name || 'Server name';
     icoFile = banFile = null;
     $('sIcon').value = ''; $('sBanner').value = '';
   }

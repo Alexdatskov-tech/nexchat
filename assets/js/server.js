@@ -1095,6 +1095,7 @@
     const n = srv.server_members?.[0]?.count ?? 0;
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
+    UI.applyServerName(srv.theme);
 
     $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
     $('meName').textContent = me.display_name || me.username;

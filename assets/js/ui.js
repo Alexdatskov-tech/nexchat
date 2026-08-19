@@ -234,5 +234,28 @@ window.UI = (function () {
     return `<span class="role-emoji">${esc(v)}</span>`;
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island };
+  /* ---- server name appearance ----
+     A server's theme can override the colour and typeface its name is shown
+     in. Both fall back to the stylesheet defaults (white, display face) so an
+     unset or partially set theme can never render the name invisible. */
+  const NAME_FONTS = {
+    display: { label: 'Display', stack: "'Bricolage Grotesque', sans-serif" },
+    body: { label: 'Sans', stack: "'Instrument Sans', sans-serif" },
+    mono: { label: 'Mono', stack: "'JetBrains Mono', monospace" },
+    serif: { label: 'Serif', stack: "Georgia, 'Times New Roman', serif" },
+    rounded: { label: 'Rounded', stack: "'Trebuchet MS', 'Segoe UI', sans-serif" },
+  };
+
+  function nameFontStack(key) {
+    return NAME_FONTS[key]?.stack || NAME_FONTS.display.stack;
+  }
+
+  function applyServerName(theme) {
+    const root = document.documentElement.style;
+    const col = theme?.name_color;
+    root.setProperty('--srv-name-color', /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF');
+    root.setProperty('--srv-name-font', nameFontStack(theme?.name_font));
+  }
+
+  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, nameFontStack, NAME_FONTS };
 })();
