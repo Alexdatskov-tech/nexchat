@@ -147,6 +147,55 @@
 
   const grouped = (pa, pt, m) => pa === m.author_id && (new Date(m.created_at) - new Date(pt)) < 5 * 60 * 1000;
 
+  /* Flip a rendered row between full (avatar + name) and compact form. */
+  function setGrouped(el, grp) {
+    if (el.classList.contains('grp') === grp) return;
+    const uid = el.dataset.au, ts = el.dataset.ts;
+    const p = profiles[uid] || { username: 'unknown' };
+    const name = p.display_name || p.username;
+    const first = el.firstElementChild;
+
+    if (grp) {
+      first.outerHTML = `<div class="m-gutter"><span class="hovertime">${new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`;
+      el.querySelector('.m-head')?.remove();
+      el.classList.add('grp');
+    } else {
+      first.outerHTML = `<div class="m-av" data-u="${uid}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
+      if (!el.querySelector('.m-head')) {
+        el.querySelector('.m-main').insertAdjacentHTML('afterbegin',
+          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
+           <span class="m-time">${UI.timeLabel(ts)}</span></div>`);
+      }
+      el.classList.remove('grp');
+    }
+    wire(el);
+  }
+
+  /* Re-derive grouping across the whole list. Called after any removal so a
+     deleted header message doesn't leave the ones below it nameless. */
+  function regroup() {
+    let pa = null, pt = 0;
+    $('msgs').querySelectorAll('.m').forEach((el) => {
+      const grp = pa === el.dataset.au && (new Date(el.dataset.ts) - new Date(pt)) < 5 * 60 * 1000;
+      setGrouped(el, grp);
+      pa = el.dataset.au; pt = el.dataset.ts;
+    });
+  }
+
+  /* Remove the attachment objects from storage too, so deleting a message
+     doesn't leave orphaned files sitting in the bucket forever. */
+  async function purgeAttachments(mid) {
+    const list = attCache[mid] || [];
+    for (const a of list) {
+      try {
+        const key = decodeURIComponent(new URL(a.url).pathname.replace(/^\/[^/]+\//, ''));
+        if (key) await window.__nx_tp.del(key);
+      } catch {}
+    }
+    delete attCache[mid];
+  }
+
   async function loadMessages(cid) {
     const box = $('msgs');
     box.innerHTML = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
@@ -230,10 +279,15 @@
       const dlb = el.querySelector('.a-del');
       if (dlb) dlb.onclick = async (ev) => {
         ev.stopPropagation();
-        if (!await UI.confirmDialog('Delete message', 'This removes it for everyone.', true)) return;
+        const n = (attCache[id] || []).length;
+        const body = n ? `This removes the message and its ${n} file${n === 1 ? '' : 's'} for everyone.`
+                       : 'This removes it for everyone.';
+        if (!await UI.confirmDialog('Delete message', body, true)) return;
         const { error } = await window.db.from('messages').delete().eq('id', id);
-        if (error) UI.toast(error.message, true);
-        else document.querySelector(`.m[data-id="${id}"]`)?.remove();
+        if (error) return UI.toast(error.message, true);
+        purgeAttachments(id);
+        document.querySelector(`.m[data-id="${id}"]`)?.remove();
+        regroup();
       };
     });
   }
@@ -332,6 +386,8 @@
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
         document.querySelector(`.m[data-id="${p.old.id}"]`)?.remove();
+        delete attCache[p.old.id];
+        regroup();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, (p) => {
         if (!document.querySelector(`.m[data-id="${p.new.message_id}"]`)) return;
@@ -423,6 +479,7 @@
         if (!ok && !v) {
           await window.db.from('messages').delete().eq('id', msg.id);
           document.querySelector(`.m[data-id="${msg.id}"]`)?.remove();
+          regroup();
           return;
         }
 

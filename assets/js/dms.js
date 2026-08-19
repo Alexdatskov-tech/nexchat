@@ -171,6 +171,48 @@
 
   const grouped = (pa, pt, m) => pa === m.author_id && (new Date(m.created_at) - new Date(pt)) < 5 * 60 * 1000;
 
+  function setGrouped(el, grp) {
+    if (el.classList.contains('grp') === grp) return;
+    const uid = el.dataset.au, ts = el.dataset.ts;
+    const p = profiles[uid] || { username: 'unknown' };
+    const name = p.display_name || p.username;
+    const first = el.firstElementChild;
+    if (grp) {
+      first.outerHTML = `<div class="m-gutter"><span class="hovertime">${new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`;
+      el.querySelector('.m-head')?.remove();
+      el.classList.add('grp');
+    } else {
+      first.outerHTML = `<div class="m-av" data-u="${uid}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
+      if (!el.querySelector('.m-head')) {
+        el.querySelector('.m-main').insertAdjacentHTML('afterbegin',
+          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
+           <span class="m-time">${UI.timeLabel(ts)}</span></div>`);
+      }
+      el.classList.remove('grp');
+    }
+    wire(el);
+  }
+
+  function regroup() {
+    let pa = null, pt = 0;
+    $('msgs').querySelectorAll('.m').forEach((el) => {
+      const grp = pa === el.dataset.au && (new Date(el.dataset.ts) - new Date(pt)) < 5 * 60 * 1000;
+      setGrouped(el, grp);
+      pa = el.dataset.au; pt = el.dataset.ts;
+    });
+  }
+
+  async function purgeAttachments(mid) {
+    for (const a of attCache[mid] || []) {
+      try {
+        const key = decodeURIComponent(new URL(a.url).pathname.replace(/^\/[^/]+\//, ''));
+        if (key) await window.__nx_tp.del(key);
+      } catch {}
+    }
+    delete attCache[mid];
+  }
+
   function row(m, grp) {
     const p = profiles[m.author_id] || { username: 'unknown' };
     const name = p.display_name || p.username;
@@ -244,9 +286,15 @@
         });
       }
       el.querySelector('.a-del')?.addEventListener('click', async () => {
-        if (!await UI.confirmDialog('Delete message', 'This removes it for everyone.', true)) return;
+        const n = (attCache[id] || []).length;
+        const body = n ? `This removes the message and its ${n} file${n === 1 ? '' : 's'} for everyone.`
+                       : 'This removes it for everyone.';
+        if (!await UI.confirmDialog('Delete message', body, true)) return;
         const { error } = await window.db.from('dm_messages').delete().eq('id', id);
-        if (error) UI.toast(error.message, true); else el.remove();
+        if (error) return UI.toast(error.message, true);
+        purgeAttachments(id);
+        el.remove();
+        regroup();
       });
       el.querySelector('.a-ed')?.addEventListener('click', () => edit(el, id));
     });
@@ -308,6 +356,8 @@
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, (p) => {
         document.querySelector(`.m[data-id="${p.old.id}"]`)?.remove();
+        delete attCache[p.old.id];
+        regroup();
       })
       .subscribe();
   }
@@ -375,6 +425,7 @@
         if (!ok && !v) {
           await window.db.from('dm_messages').delete().eq('id', msg.id);
           document.querySelector(`.m[data-id="${msg.id}"]`)?.remove();
+          regroup();
           return;
         }
         let { data: aa } = await window.db.from('dm_message_attachments')
