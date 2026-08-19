@@ -441,13 +441,63 @@
         .eq('conversation_id', cid).order('created_at', { ascending: true }).limit(50);
       if (since) q = q.gt('created_at', since);
       const { data, error } = await q;
-      if (error || !data?.length) return;
-      for (const m of data) {
-        if (!active || active.id !== cid) return;
-        if (m.profiles) profiles[m.author_id] = m.profiles;
-        if (await appendMessage(m)) await hydrateAtts(m.id, false);
+      if (!error && data?.length) {
+        for (const m of data) {
+          if (!active || active.id !== cid) return;
+          if (m.profiles) profiles[m.author_id] = m.profiles;
+          if (await appendMessage(m)) await hydrateAtts(m.id, false);
+        }
       }
+      await catchUpEdits(cid);
     } finally { catching = false; }
+  }
+
+  /* Reconciles edits and deletes for the messages currently on screen.
+
+     The watermark query above only looks for rows *newer* than the last one
+     shown, so a message edited or removed after we rendered it is invisible
+     to it -- which is why those still needed a refresh. We re-read the
+     visible ids: anything returned gets its text refreshed if it changed,
+     and any id that does NOT come back has been deleted. */
+  async function catchUpEdits(cid) {
+    const els = [...document.querySelectorAll('#msgs .m[data-id]')];
+    if (!els.length) return;
+    const ids = els.slice(-60).map((el) => el.dataset.id);
+    const { data, error } = await window.db.from('dm_messages')
+      .select('id,content,edited_at').in('id', ids);
+    if (error || !data || !active || active.id !== cid) return;
+
+    const live = new Map(data.map((m) => [m.id, m]));
+    let removed = false;
+
+    for (const id of ids) {
+      const el = document.querySelector(`.m[data-id="${id}"]`);
+      if (!el) continue;
+      const m = live.get(id);
+
+      if (!m) {
+        el.remove();
+        delete attCache[id];
+        removed = true;
+        continue;
+      }
+
+      // Don't clobber a message the user is actively editing.
+      if (el.querySelector('.editbox')) continue;
+      const cur = el.querySelector('.m-text');
+      if (!cur) continue;
+
+      const nextRaw = MD.esc(m.content || '');
+      const nextEdited = !!m.edited_at;
+      const wasEdited = !!cur.querySelector('.m-edited');
+      if (cur.dataset.raw === nextRaw && wasEdited === nextEdited) continue;
+
+      cur.dataset.raw = nextRaw;
+      cur.innerHTML = MD.render(m.content) + (nextEdited ? '<span class="m-edited">(edited)</span>' : '');
+      wire(el);
+    }
+
+    if (removed) regroup();
   }
 
   let rtHealthy = false, rtProven = false, pollTimer = null, pollRate = 0, retryTimer = null, retries = 0;
