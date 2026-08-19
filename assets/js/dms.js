@@ -450,11 +450,26 @@
     } finally { catching = false; }
   }
 
-  let rtHealthy = false, pollTimer = null, retryTimer = null, retries = 0;
+  let rtHealthy = false, rtProven = false, pollTimer = null, pollRate = 0, retryTimer = null, retries = 0;
+
+  /* Polling is never fully switched off.
+
+     A channel can report SUBSCRIBED and still deliver nothing -- e.g.
+     when the table is not in the `supabase_realtime` publication, or
+     the socket is half-open behind a proxy. In that case an
+     error-triggered fallback never fires and messages stop appearing
+     until a refresh. So we always keep a reconcile loop running and
+     merely slow it down while realtime looks healthy. appendMessage()
+     dedupes by message id, so the overlap is free. */
+  const POLL_FAST = 3000;   // realtime is down / unproven
+  const POLL_IDLE = 8000;   // realtime has actually delivered, this is a safety net
 
   function setPolling(on) {
-    if (on && !pollTimer) pollTimer = setInterval(catchUp, 5000);
-    if (!on && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    const want = on ? POLL_FAST : POLL_IDLE;
+    if (pollTimer && pollRate === want) return;
+    if (pollTimer) clearInterval(pollTimer);
+    pollRate = want;
+    pollTimer = setInterval(catchUp, want);
   }
 
   function scheduleRetry(cid) {
@@ -469,6 +484,8 @@
     rtHealthy = false;
     sub = window.db.channel('dm:' + cid)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, async (p) => {
+        // A delivered event is the only real proof realtime works.
+        if (!rtProven) { rtProven = true; setPolling(false); }
         if (await appendMessage(p.new)) await hydrateAtts(p.new.id, true);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, (p) => {
@@ -505,7 +522,8 @@
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           rtHealthy = true; retries = 0;
-          setPolling(false);
+          // Only trust it enough to back off once it has really delivered.
+          setPolling(!rtProven);
           catchUp();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           rtHealthy = false;
