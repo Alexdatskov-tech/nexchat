@@ -860,6 +860,7 @@
     me = await UI.myProfile(s.user.id);
     if (me) {
       window.Notify?.start(me);
+      window.Guard?.start(me);
       window.Presence?.start(me);
       window.Presence?.onChange(() => { window.Presence.refreshDots(); if (tab === 'friends') paintList(); });
     }

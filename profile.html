@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=26" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=27" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=26" />
+<link rel="stylesheet" href="assets/css/theme.css?v=27" />
 </head>
 <body>
 <div class="set-wrap">
@@ -66,7 +66,7 @@
         <div class="upload-row">
           <div class="upload-prev" id="avPrev"><i class="fa-regular fa-user"></i></div>
           <div style="flex:1;">
-            <input type="file" id="fAvatar" accept="image/*" />
+            <input type="file" id="fAvatar" accept="image/*,.tif,.tiff" />
             <button class="btn btn-quiet btn-sm hidden" id="avClear" style="margin-top:8px;">Remove avatar</button>
           </div>
         </div>
@@ -78,7 +78,7 @@
         <div class="upload-row">
           <div class="upload-prev wide" id="bnPrev"><i class="fa-regular fa-image"></i></div>
           <div style="flex:1;">
-            <input type="file" id="fBanner" accept="image/*" />
+            <input type="file" id="fBanner" accept="image/*,.tif,.tiff" />
             <button class="btn btn-quiet btn-sm hidden" id="bnClear" style="margin-top:8px;">Remove banner</button>
           </div>
         </div>
@@ -97,7 +97,7 @@
           <div class="upload-prev wide" id="wpPrev"><i class="fa-regular fa-image"></i></div>
           <div class="field" style="flex:1;">
             <label>Upload your own wallpaper</label>
-            <input type="file" id="fWallpaper" accept="image/*" />
+            <input type="file" id="fWallpaper" accept="image/*,.tif,.tiff" />
             <span class="hint">Stored in your NexChat cloud, so it follows you to any device. Under 10 MB.</span>
           </div>
         </div>
@@ -143,6 +143,16 @@
           <label for="fHalo">Animated halo image</label>
           <input id="fHalo" type="text" placeholder="https://…/loop.gif" />
           <span class="hint">Direct link to a GIF or APNG. It rings your avatar everywhere.</span>
+        </div>
+
+        <div class="field hidden" id="haloCssField" style="margin-top:14px;">
+          <label for="fHaloCss">Custom halo CSS</label>
+          <textarea id="fHaloCss" rows="3" spellcheck="false" class="mono"
+                    placeholder="background: linear-gradient(90deg,#f0f,#0ff); animation: spin 2s linear infinite;"></textarea>
+          <span class="hint">
+            Developer mode only. CSS declarations for the ring — no selectors, braces or
+            <code>url()</code>. Overrides the halo image above. Leave empty for the default sweep.
+          </span>
         </div>
       </div>
 
@@ -236,14 +246,16 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=26"></script>
-<script src="assets/js/supabase-client.js?v=26"></script>
-<script src="assets/js/ui.js?v=26"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=26"></script>
-<script src="assets/js/ice.js?v=26"></script>
-<script src="assets/js/md.js?v=26"></script>
-<script src="assets/js/presence.js?v=26"></script>
-<script src="assets/js/notify.js?v=26"></script>
-<script src="assets/js/profile.js?v=26"></script>
+<script src="assets/js/config.js?v=27"></script>
+<script src="assets/js/supabase-client.js?v=27"></script>
+<script src="assets/js/ui.js?v=27"></script>
+<script src="assets/js/tiff.js?v=27"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=27"></script>
+<script src="assets/js/ice.js?v=27"></script>
+<script src="assets/js/md.js?v=27"></script>
+<script src="assets/js/presence.js?v=27"></script>
+<script src="assets/js/guard.js?v=27"></script>
+<script src="assets/js/notify.js?v=27"></script>
+<script src="assets/js/profile.js?v=27"></script>
 </body>
 </html>

@@ -35,8 +35,91 @@ window.UI = (function () {
     const inner = profile?.avatar_url
       ? `<div class="av" style="width:${size}px;height:${size}px;"><img src="${esc(profile.avatar_url)}" alt=""></div>`
       : `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;${bg}">${initial(name)}</div>`;
-    if (profile?.is_nitro && o.halo !== false) return `<span class="av-halo">${inner}</span>`;
+    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${inner}</span>`;
     return inner;
+  }
+
+  /* ---- Nitro halo ----
+     Three tiers, in order of precedence:
+       1. custom CSS   - dev mode only, the ring is whatever the user writes
+       2. a GIF/APNG   - banner_gif_url, spun as an image instead of a gradient
+       3. the default  - the built-in conic-gradient sweep */
+  const IMG_EXT = /\.(gif|apng|png|jpe?g|webp|avif)($|\?)/i;
+
+  // Only same-scheme https images, and only ones that look like images.
+  function haloImage(profile) {
+    const raw = (profile?.banner_gif_url || '').trim();
+    if (!raw) return null;
+    let u;
+    try { u = new URL(raw, location.href); } catch { return null; }
+    if (!['https:', 'http:'].includes(u.protocol)) return null;
+    if (!IMG_EXT.test(u.pathname)) return null;
+    return u.href;
+  }
+
+  /* Custom halo CSS is a dev-mode toy, so it is still fenced in: declarations
+     only (no selectors, no braces, no @rules) and no url()/expression payloads. */
+  function haloCss(profile) {
+    if (!profile?.theme?.dev_mode) return null;
+    const raw = (profile.theme.halo_css || '').trim();
+    if (!raw) return null;
+    if (/[{}<>;]\s*@|[{}<>]/.test(raw)) return null;
+    if (/url\s*\(|expression\s*\(|javascript:|behavior\s*:|@import/i.test(raw)) return null;
+    if (raw.length > 400) return null;
+    return raw;
+  }
+
+  /* Custom CSS has to reach the ring, which is a ::before pseudo-element and so
+     cannot be styled inline. Each distinct snippet therefore becomes one rule in
+     a shared stylesheet, keyed by a hash of its text so repeats are free. */
+  const haloSheetKeys = new Set();
+  let haloSheet = null;
+
+  function haloKey(css) {
+    let h = 0;
+    for (let i = 0; i < css.length; i++) h = (Math.imul(31, h) + css.charCodeAt(i)) | 0;
+    return 'av-halo-c' + (h >>> 0).toString(36);
+  }
+
+  function registerHaloCss(css) {
+    const key = haloKey(css);
+    if (haloSheetKeys.has(key) || typeof document === 'undefined') return key;
+    // The profile editor re-registers on every keystroke, so the sheet is
+    // recycled rather than allowed to grow without bound.
+    if (haloSheet && haloSheetKeys.size >= 64) {
+      haloSheet.textContent = '';
+      haloSheetKeys.clear();
+    }
+    if (!haloSheet) {
+      haloSheet = document.getElementById('nx-halo-styles') || document.createElement('style');
+      haloSheet.id = 'nx-halo-styles';
+      if (!haloSheet.parentNode) (document.head || document.documentElement).appendChild(haloSheet);
+    }
+    haloSheet.appendChild(document.createTextNode(`.${key}::before{${css};}`));
+    haloSheetKeys.add(key);
+    return key;
+  }
+
+  function haloClass(profile) {
+    const custom = haloCss(profile);
+    if (custom) return `av-halo av-halo-custom ${registerHaloCss(custom)}`;
+    if (haloImage(profile)) return 'av-halo av-halo-img';
+    return 'av-halo';
+  }
+
+  // The style text itself, for callers that set it via the DOM. Custom CSS lives
+  // in the stylesheet instead, so only the image tier needs an inline value.
+  function haloStyleText(profile) {
+    if (haloCss(profile)) return '';
+    const img = haloImage(profile);
+    if (img) return `--halo-img:url('${img.replace(/['"\\]/g, '')}')`;
+    return '';
+  }
+
+  // Returns a ready-to-interpolate style attribute, or '' when none is needed.
+  function haloStyle(profile) {
+    const text = haloStyleText(profile);
+    return text ? ` style="${esc(text)}"` : '';
   }
 
   async function requireSession(redirect) {
@@ -53,9 +136,18 @@ window.UI = (function () {
   // Uploads to a Supabase Storage bucket and returns the public URL.
   // Profile buckets are RLS-scoped to a folder named after the user's id.
   async function upload(bucket, file, folder) {
+    // Stored images are shown as plain <img> throughout the app, so a TIFF is
+    // normalised to PNG here rather than needing a decoder at every render site.
+    if (window.Tiff?.isTiff(file.name)) {
+      try { file = await window.Tiff.toPngFile(file); }
+      catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
+    }
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await window.db.storage.from(bucket).upload(path, file, { upsert: false });
+    // Browsers leave file.type empty for .tiff and most font files, and Storage
+    // then stores them as octet-stream, which breaks <img> and @font-face.
+    const contentType = file.type || window.__nx_tp?.mimeOf?.(file.name) || 'application/octet-stream';
+    const { error } = await window.db.storage.from(bucket).upload(path, file, { upsert: false, contentType });
     if (error) throw error;
     const { data } = window.db.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
@@ -183,7 +275,7 @@ window.UI = (function () {
     ov.innerHTML = `<div class="upop">
       <div class="upop-banner" style="background:${banner}"></div>
       <div class="upop-body">
-        <div class="upop-av ${p.is_nitro ? 'av-halo' : ''}">${avatar(p, 68, { halo: false })}</div>
+        <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
         <h3>${esc(name)}
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
           ${p.is_platform_admin ? '<span class="badge badge-admin">Admin</span>' : ''}</h3>
@@ -250,12 +342,87 @@ window.UI = (function () {
     return NAME_FONTS[key]?.stack || NAME_FONTS.display.stack;
   }
 
+  /* ---- custom fonts ----
+     A theme may point at a Google Fonts URL or an uploaded font file instead
+     of one of the built-in stacks. Both are loaded on demand and cached, so
+     the same face is never requested twice on one page. */
+  const loadedFonts = new Set();
+
+  // Only ever inject stylesheet links we recognise as Google's font CDN.
+  function googleFontHref(url) {
+    let u;
+    try { u = new URL(String(url).trim()); } catch { return null; }
+    if (u.protocol !== 'https:') return null;
+    if (!['fonts.googleapis.com', 'fonts.gstatic.com'].includes(u.hostname)) return null;
+    return u.href;
+  }
+
+  // Pulls the family out of a Google Fonts URL: ...?family=Rubik+Glitch&...
+  function googleFontFamily(url) {
+    try {
+      const fam = new URL(url).searchParams.get('family');
+      if (!fam) return null;
+      return fam.split(':')[0].replace(/\+/g, ' ').trim() || null;
+    } catch { return null; }
+  }
+
+  function loadGoogleFont(url) {
+    const href = googleFontHref(url);
+    if (!href || loadedFonts.has(href)) return googleFontFamily(href || '');
+    loadedFonts.add(href);
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    l.crossOrigin = 'anonymous';
+    document.head.appendChild(l);
+    return googleFontFamily(href);
+  }
+
+  const FONT_FORMATS = { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype', ttc: 'collection' };
+
+  // Registers an uploaded font file under a generated family name.
+  function loadFontFile(url, family) {
+    if (!url || loadedFonts.has(url)) return family;
+    let u;
+    try { u = new URL(url, location.href); } catch { return null; }
+    if (!['https:', 'http:', 'blob:', 'data:'].includes(u.protocol)) return null;
+    loadedFonts.add(url);
+    const ext = (u.pathname.split('.').pop() || '').toLowerCase();
+    const fmt = FONT_FORMATS[ext];
+    const st = document.createElement('style');
+    st.textContent = `@font-face{font-family:'${family}';src:url('${url}')${fmt ? ` format('${fmt}')` : ''};font-display:swap;}`;
+    document.head.appendChild(st);
+    return family;
+  }
+
+  // Stable per-URL family name, so a page showing several servers (the portal
+  // grid) can register each uploaded face without them overwriting each other.
+  function fontFamilyFor(url) {
+    let h = 0;
+    for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0;
+    return `NexFont${(h >>> 0).toString(36)}`;
+  }
+
+  /* Resolves whichever font source a theme specifies down to one CSS stack. */
+  function resolveNameFont(theme) {
+    const t = theme || {};
+    if (t.name_font === 'google' && t.name_font_url) {
+      const fam = loadGoogleFont(t.name_font_url);
+      if (fam) return `'${fam}', ${NAME_FONTS.display.stack}`;
+    }
+    if (t.name_font === 'upload' && t.name_font_file) {
+      const fam = loadFontFile(t.name_font_file, fontFamilyFor(t.name_font_file));
+      if (fam) return `'${fam}', ${NAME_FONTS.display.stack}`;
+    }
+    return nameFontStack(t.name_font);
+  }
+
   function applyServerName(theme) {
     const root = document.documentElement.style;
     const col = theme?.name_color;
     root.setProperty('--srv-name-color', /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF');
-    root.setProperty('--srv-name-font', nameFontStack(theme?.name_font));
+    root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, nameFontStack, NAME_FONTS };
+  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS };
 })();

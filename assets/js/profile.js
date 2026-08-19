@@ -21,6 +21,7 @@
     document.documentElement.style.setProperty('--dash-dim', bgDim / 100);
     document.documentElement.style.setProperty('--dash-blur', bgBlur + 'px');
     document.documentElement.style.setProperty('--dash-bright', bgBright / 100);
+    document.body.classList.toggle('bg-blur', bgBlur > 0);
     if (!document.querySelector('.dash-veil')) {
       const v = document.createElement('div'); v.className = 'dash-veil'; document.body.appendChild(v);
     }
@@ -64,7 +65,15 @@
     const avUrl = clearAvatar ? null : (avatarFile?._preview || me.avatar_url);
     const bnUrl = clearBanner ? null : (bannerFile?._preview || me.banner_url);
 
-    $('pvAvWrap').className = 'pcard-av' + (me.is_nitro ? ' av-halo' : '');
+    // Preview the halo from the in-progress fields, not just the saved row,
+    // so editing the GIF URL or the custom CSS updates the card live.
+    const haloPreview = { ...me, banner_gif_url: $('fHalo')?.value.trim() || me.banner_gif_url,
+      theme: { ...(me.theme || {}), dev_mode: devMode, halo_css: $('fHaloCss')?.value.trim() || '' } };
+    const wrap = $('pvAvWrap');
+    wrap.className = 'pcard-av' + (me.is_nitro ? ' ' + UI.haloClass(haloPreview) : '');
+    wrap.removeAttribute('style');
+    const haloStyleText = me.is_nitro ? UI.haloStyleText(haloPreview) : '';
+    if (haloStyleText) wrap.setAttribute('style', haloStyleText);
     $('pvAvWrap').innerHTML = avUrl
       ? `<div class="av"><img src="${avUrl}" alt=""></div>`
       : `<div class="av" style="background:${accent};">${UI.initial(display)}</div>`;
@@ -101,13 +110,21 @@
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 10 * 1024 * 1024) { UI.toast('That wallpaper is over 10 MB.', true); e.target.value = ''; return; }
     wpFile = f;
-    const r = new FileReader();
-    r.onload = (ev) => {
-      $('wpPrev').innerHTML = `<img src="${ev.target.result}">`;
-      bgVal = `url('${ev.target.result}')`;   // instant local preview; uploads on save
+    const preview = (src) => {
+      $('wpPrev').innerHTML = `<img src="${src}">`;
+      bgVal = `url('${src}')`;   // instant local preview; uploads on save
       $('fBgUrl').value = '';
       paintBgUI();
     };
+    if (window.Tiff?.isTiff(f.name)) {
+      // CSS cannot paint a TIFF, so decode it before previewing.
+      window.Tiff.toPngUrl(URL.createObjectURL(f))
+        .then(preview)
+        .catch(() => UI.toast('That TIFF could not be read. Try a PNG or JPEG.', true));
+      return;
+    }
+    const r = new FileReader();
+    r.onload = (ev) => preview(ev.target.result);
     r.readAsDataURL(f);
   };
   $('fBgBlur').oninput = (e) => { bgBlur = +e.target.value; paintBgUI(); };
@@ -142,8 +159,17 @@
   $('devToggle').onchange = (e) => {
     devMode = e.target.checked;
     $('devPanel').classList.toggle('hidden', !devMode);
+    syncHaloCssField();
+    paint();
     if (devMode) paintIce();
   };
+
+  // The custom-halo box only exists for Nitro members in developer mode.
+  function syncHaloCssField() {
+    $('haloCssField').classList.toggle('hidden', !(devMode && me?.is_nitro));
+  }
+  $('fHalo').oninput = () => paint();
+  $('fHaloCss').oninput = () => paint();
   $('iceProbe').onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Testing…';
     await ICE.rank(ICE.STUN, true);
@@ -177,6 +203,7 @@
         f._preview = ev.target.result;
         if (kind === 'avatar') { avatarFile = f; clearAvatar = false; } else { bannerFile = f; clearBanner = false; }
         $(prevId).innerHTML = `<img src="${ev.target.result}" alt="">`;
+        window.Tiff?.hydrateFile($(prevId).querySelector('img'), f);
         $(clearId).classList.remove('hidden');
         paint();
       };
@@ -208,6 +235,11 @@
       // Wallpaper lives in iDrive; Supabase only stores the URL, so the same
       // background follows this account onto any other device.
       if (wpFile) {
+        // TIFF is not renderable as a CSS background; store a PNG instead.
+        if (window.Tiff?.isTiff(wpFile.name)) {
+          try { wpFile = await window.Tiff.toPngFile(wpFile); }
+          catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
+        }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
         const up = await window.__nx_tp.put(key, wpFile);
         bgVal = `url('${up.url}')`;
@@ -221,7 +253,14 @@
       patch.theme.dash_bright = bgBright;
       patch.theme.dev_mode = devMode;
       patch.theme.manual_stun = manualStun;
-      if (me.is_nitro) patch.banner_gif_url = $('fHalo').value.trim() || null;
+      if (me.is_nitro) {
+        patch.banner_gif_url = $('fHalo').value.trim() || null;
+        const hc = $('fHaloCss').value.trim();
+        if (hc && !UI.haloCss({ theme: { dev_mode: true, halo_css: hc } })) {
+          throw new Error('That halo CSS is not allowed. Use plain declarations, with no selectors, braces or url().');
+        }
+        patch.theme.halo_css = hc || null;
+      }
 
       if (avatarFile) patch.avatar_url = await UI.upload('avatars', avatarFile, me.id);
       else if (clearAvatar) patch.avatar_url = null;
@@ -252,6 +291,8 @@
     if (me.is_nitro) {
       $('nitroActive').style.display = '';
       $('fHalo').value = me.banner_gif_url || '';
+      $('fHaloCss').value = me.theme?.halo_css || '';
+      syncHaloCssField();
       $('nitroSince').textContent = me.nitro_since
         ? 'Active since ' + new Date(me.nitro_since).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })
         : 'Active on your account.';
@@ -319,6 +360,8 @@
     }
     $('devToggle').checked = devMode;
     $('devPanel').classList.toggle('hidden', !devMode);
+    $('fHaloCss').value = th.halo_css || '';
+    syncHaloCssField();
     if (devMode) paintIce();
     paintBgUI();
     avatarFile = bannerFile = null; clearAvatar = clearBanner = false;
@@ -334,7 +377,8 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) return UI.toast('Could not load your profile.', true);
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
     $('acUser').textContent = '@' + me.username;
     $('acSince').textContent = new Date(me.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
     hydrate();

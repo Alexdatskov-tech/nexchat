@@ -1102,6 +1102,7 @@
     $('meHandle').textContent = '@' + me.username;
 
     window.Notify?.start(me);
+    window.Guard?.start(me);
     window.Presence?.start(me);
     window.Presence?.onChange(() => window.Presence.refreshDots());
 

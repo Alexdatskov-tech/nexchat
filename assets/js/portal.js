@@ -17,6 +17,9 @@
     document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
     document.documentElement.style.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
     document.documentElement.style.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
+    // Blur is only mounted when actually asked for, so a zero-blur wallpaper
+    // costs nothing.
+    document.body.classList.toggle('bg-blur', (t.dash_blur ?? 0) > 0);
     if (!document.querySelector('.dash-veil')) {
       const v = document.createElement('div');
       v.className = 'dash-veil';
@@ -29,7 +32,7 @@
   function nameStyle(theme) {
     const col = theme?.name_color;
     const safe = /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF';
-    return `color:${safe};font-family:${UI.nameFontStack(theme?.name_font)}`;
+    return `color:${safe};font-family:${UI.resolveNameFont(theme)}`;
   }
 
   function card(s) {
@@ -104,7 +107,10 @@
     const f = e.target.files[0]; if (!f) return;
     iconFile = f;
     const r = new FileReader();
-    r.onload = (ev) => { $('cIconPrev').innerHTML = `<img src="${ev.target.result}" alt="">`; };
+    r.onload = (ev) => {
+      $('cIconPrev').innerHTML = `<img src="${ev.target.result}" alt="">`;
+      window.Tiff?.hydrateFile($('cIconPrev').querySelector('img'), f);
+    };
     r.readAsDataURL(f);
   };
 
@@ -153,7 +159,8 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) { UI.toast('Profile missing — try signing out and back in.', true); return; }
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
     applyDashboardBg(me.theme);
     $('meAv').innerHTML = UI.avatar(me, 24);
     $('meName').textContent = me.display_name || me.username;

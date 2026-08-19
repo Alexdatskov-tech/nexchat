@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Server settings</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=26" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=27" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=26" />
+<link rel="stylesheet" href="assets/css/theme.css?v=27" />
 </head>
 <body>
 <div class="set-wrap">
@@ -37,14 +37,14 @@
         <h4>Icon</h4><div class="bsub">Square, under 2 MB.</div>
         <div class="upload-row">
           <div class="upload-prev" id="icoPrev"><i class="fa-regular fa-image"></i></div>
-          <input type="file" id="sIcon" accept="image/*" />
+          <input type="file" id="sIcon" accept="image/*,.tif,.tiff" />
         </div>
       </div>
       <div class="set-block">
         <h4>Banner</h4><div class="bsub">Wide, under 4 MB. Shows on the server card.</div>
         <div class="upload-row">
           <div class="upload-prev wide" id="banPrev"><i class="fa-regular fa-image"></i></div>
-          <input type="file" id="sBanner" accept="image/*" />
+          <input type="file" id="sBanner" accept="image/*,.tif,.tiff" />
         </div>
       </div>
     </section>
@@ -73,6 +73,25 @@
           <input type="text" id="sNameHex" class="input mono" style="max-width:130px;" maxlength="7" />
           <select id="sNameFont" class="input" style="max-width:170px;"></select>
           <button class="btn btn-quiet btn-sm" id="sNameReset">Reset to default</button>
+        </div>
+
+        <div id="sFontGoogle" class="font-src hidden">
+          <label class="lbl" for="sNameFontUrl">Google Fonts URL</label>
+          <input type="text" id="sNameFontUrl" class="input mono" spellcheck="false"
+                 placeholder="https://fonts.googleapis.com/css2?family=Rubik+Glitch&display=swap" />
+          <div class="bsub" style="margin-top:7px;">
+            Open <b>fonts.google.com</b>, pick a family, then paste the <code>@import</code> or
+            <code>&lt;link&gt;</code> URL here. Only fonts.googleapis.com links are accepted.
+          </div>
+        </div>
+
+        <div id="sFontUpload" class="font-src hidden">
+          <label class="lbl" for="sNameFontFile">Font file</label>
+          <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;">
+            <input type="file" id="sNameFontFile" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" />
+            <span id="sFontFileName" class="bsub"></span>
+          </div>
+          <div class="bsub" style="margin-top:7px;">WOFF2, WOFF, TTF or OTF, up to 3 MB.</div>
         </div>
       </div>
     </section>
@@ -129,13 +148,15 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=26"></script>
-<script src="assets/js/supabase-client.js?v=26"></script>
-<script src="assets/js/ui.js?v=26"></script>
-<script src="assets/js/md.js?v=26"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=26"></script>
-<script src="assets/js/presence.js?v=26"></script>
-<script src="assets/js/notify.js?v=26"></script>
-<script src="assets/js/server-settings.js?v=26"></script>
+<script src="assets/js/config.js?v=27"></script>
+<script src="assets/js/supabase-client.js?v=27"></script>
+<script src="assets/js/ui.js?v=27"></script>
+<script src="assets/js/tiff.js?v=27"></script>
+<script src="assets/js/md.js?v=27"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=27"></script>
+<script src="assets/js/presence.js?v=27"></script>
+<script src="assets/js/guard.js?v=27"></script>
+<script src="assets/js/notify.js?v=27"></script>
+<script src="assets/js/server-settings.js?v=27"></script>
 </body>
 </html>

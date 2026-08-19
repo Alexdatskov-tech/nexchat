@@ -335,6 +335,7 @@ window.Viewer = (function () {
       <a href="${url}" download class="btn btn-ghost btn-sm"><i class="fa-solid fa-download"></i> Download</a>
       <button class="btn btn-ghost btn-sm lb-x"><i class="fa-solid fa-xmark"></i></button></div>`;
     document.body.appendChild(ov);
+    window.Tiff?.hydrate(ov.querySelector('img'), url);
     const close = () => ov.remove();
     ov.onclick = (e) => { if (e.target === ov) close(); };
     ov.querySelector('.lb-x').onclick = close;
@@ -361,7 +362,10 @@ window.Viewer = (function () {
       const w = document.createElement('div');
       w.className = 'att-img';
       w.innerHTML = `<img src="${att.url}" alt="${MD.esc(att.file_name)}" loading="lazy">`;
-      w.querySelector('img').onclick = () => lightbox(att.url, att.file_name);
+      const im = w.querySelector('img');
+      im.onclick = () => lightbox(att.url, att.file_name);
+      // TIFF needs a client-side decode before most browsers will show it.
+      window.Tiff?.hydrate(im, att.url);
       return w;
     }
     if (kind === 'pdf') return pdfViewer(att);

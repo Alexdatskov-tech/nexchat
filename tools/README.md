@@ -24,3 +24,24 @@ Two filters are applied deliberately:
 
 Ordering within each group is CLDR order, which is what Android and Windows
 use in their own pickers.
+
+## test-*.js
+
+jsdom harnesses, one per feature area. They need `jsdom` on the module path:
+
+```bash
+npm i jsdom
+node tools/test-halo.js
+```
+
+Some are parameterised by a `SOCKET` env var, which decides whether the mocked
+Supabase channel delivers realtime events (`live`), stays quiet so the polling
+fallback has to cover (`silent`), or is left unset for the default path:
+
+```bash
+SOCKET=silent node tools/test-guard.js
+```
+
+`test-server`, `test-dms`, `test-rx`, `test-editdel`, `test-presence` and
+`test-guard` are the socket-parameterised ones; the rest run single-mode. Each
+prints one line per assertion and exits non-zero on the first failure.
