@@ -363,7 +363,7 @@
   let memCache = [], roleCache = [];
   async function loadMembers() {
     const [{ data: mem }, { data: roles }] = await Promise.all([
-      window.db.from('server_members').select('*, profiles(id,username,display_name,avatar_url,accent_color,is_nitro)').eq('server_id', sid),
+      window.db.from('server_members').select('*, profiles(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)').eq('server_id', sid),
       window.db.from('roles').select('*').eq('server_id', sid),
     ]);
     const { data: mr } = await window.db.from('member_roles').select('*').eq('server_id', sid);

@@ -1,7 +1,7 @@
 #!/bin/bash
 cd /tmp/nxtest
 pass=0; fail=0
-single="test-picker test-css test-auth test-srvname test-tiff test-fonts test-bgperf test-halo test-sql test-admin test-haloegs test-chatbg"
+single="test-picker test-css test-auth test-srvname test-tiff test-fonts test-bgperf test-halo test-sql test-admin test-haloegs test-chatbg test-halofetch"
 multi="test-server test-dms test-rx test-editdel test-presence test-guard"
 for t in $single; do
   if node $t.js >/tmp/nxtest/out.$t 2>&1; then echo "PASS  $t"; pass=$((pass+1)); else echo "FAIL  $t"; fail=$((fail+1)); tail -5 /tmp/nxtest/out.$t; fi

@@ -13,7 +13,7 @@
   async function profileOf(id) {
     if (profiles[id]) return profiles[id];
     const { data } = await window.db.from('profiles')
-      .select('id,username,display_name,avatar_url,accent_color,is_nitro').eq('id', id).single();
+      .select('id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', id).single();
     profiles[id] = data || { username: 'unknown', display_name: 'Unknown' };
     return profiles[id];
   }
@@ -208,7 +208,7 @@
       ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
 
     const { data: msgs, error } = await window.db.from('messages')
-      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
       .eq('channel_id', cid).order('created_at', { ascending: true }).limit(100);
     if (error) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + error.message, true); }
     msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
@@ -430,7 +430,7 @@
     const cid = active.id, since = newestTs();
     try {
       let q = window.db.from('messages')
-        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
         .eq('channel_id', cid).order('created_at', { ascending: true }).limit(50);
       if (since) q = q.gt('created_at', since);
       const { data, error } = await q;

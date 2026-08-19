@@ -15,7 +15,7 @@
 
   async function loadRequests() {
     const { data, error } = await window.db.from('nitro_requests')
-      .select('*, profiles!user_id(username,display_name,avatar_url,accent_color,is_nitro)')
+      .select('*, profiles!user_id(username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
       .order('created_at', { ascending: false });
     if (error) return UI.toast(error.message, true);
 

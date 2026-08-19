@@ -41,7 +41,7 @@ window.Notify = (function () {
         seen.add(m.id);
 
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', m.author_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', m.author_id).single();
         const name = who?.display_name || who?.username || 'Someone';
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
@@ -58,7 +58,7 @@ window.Notify = (function () {
         const f = p.new;
         if (f.friend_id !== me.id || f.status !== 'pending') return;
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', f.user_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', f.user_id).single();
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
           title: who?.display_name || who?.username || 'Someone',
@@ -71,7 +71,7 @@ window.Notify = (function () {
         const f = p.new;
         if (f.user_id !== me.id || f.status !== 'accepted') return;
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', f.friend_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', f.friend_id).single();
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
           title: who?.display_name || who?.username || 'Someone',

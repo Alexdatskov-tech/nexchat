@@ -9,7 +9,7 @@
   async function profileOf(id) {
     if (profiles[id]) return profiles[id];
     const { data } = await window.db.from('profiles')
-      .select('id,username,display_name,avatar_url,accent_color,is_nitro').eq('id', id).single();
+      .select('id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', id).single();
     profiles[id] = data || { username: 'unknown' };
     return profiles[id];
   }
@@ -34,7 +34,7 @@
     if (ids.length) {
       const { data: cs } = await window.db.from('dm_conversations').select('*').in('id', ids);
       const { data: allParts } = await window.db.from('dm_participants')
-        .select('conversation_id, user_id, profiles(id,username,display_name,avatar_url,accent_color,is_nitro)')
+        .select('conversation_id, user_id, profiles(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
         .in('conversation_id', ids);
       (allParts || []).forEach((p) => { if (p.profiles) profiles[p.user_id] = p.profiles; });
       convs = (cs || []).map((c) => ({
@@ -53,7 +53,7 @@
     const need = [...new Set([...friendIds, ...reqIds])].filter((i) => !profiles[i]);
     if (need.length) {
       const { data: ps } = await window.db.from('profiles')
-        .select('id,username,display_name,avatar_url,accent_color,is_nitro,custom_status').in('id', need);
+        .select('id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme,custom_status').in('id', need);
       (ps || []).forEach((p) => { profiles[p.id] = p; });
     }
     friends = friendIds.map((i) => profiles[i]).filter(Boolean);
@@ -304,7 +304,7 @@
     const box = $('msgs');
     box.innerHTML = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
     const { data: msgs, error } = await window.db.from('dm_messages')
-      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
       .eq('conversation_id', cid).order('created_at', { ascending: true }).limit(100);
     if (error) { box.innerHTML = ''; return UI.toast(error.message, true); }
     msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
@@ -437,7 +437,7 @@
     const cid = active.id, since = newestTs();
     try {
       let q = window.db.from('dm_messages')
-        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
         .eq('conversation_id', cid).order('created_at', { ascending: true }).limit(50);
       if (since) q = q.gt('created_at', since);
       const { data, error } = await q;
