@@ -307,11 +307,21 @@
     document.querySelectorAll('.picker').forEach((p) => p.remove());
     const p = document.createElement('div');
     p.className = 'picker';
-    p.innerHTML = QUICK.map((e) => `<button data-e="${e}">${e}</button>`).join('');
+    p.innerHTML = QUICK.map((e) => `<button data-e="${e}">${e}</button>`).join('')
+      + '<span class="pk-sep"></span>'
+      + '<button class="pk-more" title="More emoji"><i class="fa-solid fa-plus"></i></button>';
     rowEl.appendChild(p);
-    p.querySelectorAll('button').forEach((b) => {
+    p.querySelectorAll('button[data-e]').forEach((b) => {
       b.onclick = (ev) => { ev.stopPropagation(); toggleRx(mid, b.dataset.e); p.remove(); };
     });
+    // "+" hands off to the full searchable catalogue.
+    p.querySelector('.pk-more').onclick = (ev) => {
+      ev.stopPropagation();
+      p.remove();
+      // Anchor on the message's react button: `p` is gone by now, so a
+      // child of it would measure as a zero-size rect at 0,0.
+      window.EmojiPicker?.open(btn, (emoji) => toggleRx(mid, emoji));
+    };
     setTimeout(() => document.addEventListener('click', function off(ev) {
       if (!p.contains(ev.target) && !btn.contains(ev.target)) { p.remove(); document.removeEventListener('click', off); }
     }), 0);
@@ -424,13 +434,53 @@
         .eq('channel_id', cid).order('created_at', { ascending: true }).limit(50);
       if (since) q = q.gt('created_at', since);
       const { data, error } = await q;
-      if (error || !data?.length) return;
-      for (const m of data) {
-        if (!active || active.id !== cid) return;
-        if (m.profiles) profiles[m.author_id] = m.profiles;
-        if (await appendMessage(m)) await hydrateAtts(m.id, false);
+      if (!error && data?.length) {
+        for (const m of data) {
+          if (!active || active.id !== cid) return;
+          if (m.profiles) profiles[m.author_id] = m.profiles;
+          if (await appendMessage(m)) await hydrateAtts(m.id, false);
+        }
       }
+      await catchUpRx(cid);
     } finally { catching = false; }
+  }
+
+  /* Reconciles reactions for the messages currently on screen.
+
+     Reactions can't be caught by a `created_at` watermark like messages:
+     they are also *removed*, and an un-react leaves no row to find. So we
+     re-read the full set for the visible messages and diff it against what
+     we're showing, which picks up adds and removes in one pass. */
+  async function catchUpRx(cid) {
+    const ids = [...document.querySelectorAll('#msgs .m[data-id]')].map((el) => el.dataset.id);
+    if (!ids.length) return;
+    const { data, error } = await window.db.from('message_reactions')
+      .select('message_id,emoji,user_id').in('message_id', ids.slice(-60));
+    if (error || !data || !active || active.id !== cid) return;
+
+    const fresh = {};
+    data.forEach((r) => {
+      ((fresh[r.message_id] = fresh[r.message_id] || {})[r.emoji] =
+        fresh[r.message_id][r.emoji] || []).push(r.user_id);
+    });
+
+    for (const mid of ids) {
+      const now = fresh[mid] || {};
+      const had = rx[mid] || {};
+      // Compare as a stable signature so we only touch the DOM on a change;
+      // repainting every row every few seconds would kill hover states.
+      const sig = (o) => Object.keys(o).sort()
+        .map((e) => e + ':' + [...(o[e].users || o[e])].sort().join(',')).join('|');
+      if (sig(now) === sig(had)) continue;
+      if (!Object.keys(now).length) delete rx[mid];
+      else {
+        rx[mid] = {};
+        for (const [e, users] of Object.entries(now)) {
+          rx[mid][e] = { n: users.length, mine: users.includes(me.id), users: [...users] };
+        }
+      }
+      repaintRx(mid);
+    }
   }
 
   /* ================= realtime ================= */
@@ -445,7 +495,7 @@
      until a refresh. So we always keep a reconcile loop running and
      merely slow it down while realtime looks healthy. appendMessage()
      dedupes by message id, so the overlap is free. */
-  const POLL_FAST = 3000;   // realtime is down / unproven
+  const POLL_FAST = 800;    // realtime is down / unproven -- sub-second so it feels live
   const POLL_IDLE = 8000;   // realtime has actually delivered, this is a safety net
 
   function setPolling(on) {

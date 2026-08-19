@@ -456,6 +456,9 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
 .rx {
   display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px;
   font-size: 12.5px; background: var(--bg-2); border: 1px solid var(--line); cursor: pointer;
+  /* Buttons do not inherit colour: without this the count renders in the
+     UA default black, which is invisible on the dark bubble. */
+  color: var(--txt-1);
   animation: rxIn var(--t-slow) var(--spring);
   transition: border-color var(--t-fast), background var(--t-fast);
 }
@@ -471,6 +474,67 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
 }
 .picker button { background: none; border: none; font-size: 17px; cursor: pointer; padding: 3px 5px; border-radius: var(--r-xs); line-height: 1; }
 .picker button:hover { background: var(--bg-4); transform: scale(1.15); }
+.picker .pk-sep { width: 1px; align-self: stretch; background: var(--line-2); margin: 2px 3px; }
+.picker .pk-more { color: var(--txt-2); font-size: 12px; }
+.picker .pk-more:hover { color: var(--txt-1); }
+
+/* ---------- full emoji picker ---------- */
+.emoji-pick {
+  position: fixed; z-index: 120; width: 340px; height: 400px;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg-3); border: 1px solid var(--line-2);
+  border-radius: var(--r-md); box-shadow: var(--sh-3);
+  animation: popIn var(--t-fast) var(--ease);
+}
+.ep-search { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+.ep-search i { color: var(--txt-3); font-size: 12px; }
+.ep-search input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--txt-1); font-family: var(--f-body); font-size: 13.5px;
+}
+.ep-search input::placeholder { color: var(--txt-3); }
+.ep-clear { background: none; border: none; color: var(--txt-3); cursor: pointer; padding: 2px 4px; font-size: 12px; }
+.ep-clear:hover { color: var(--txt-1); }
+
+.ep-rail { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.ep-rail::-webkit-scrollbar { display: none; }
+.ep-cat {
+  flex: 0 0 auto; background: none; border: none; cursor: pointer;
+  color: var(--txt-3); font-size: 13px; padding: 6px 8px; border-radius: var(--r-xs);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.ep-cat:hover { color: var(--txt-1); background: var(--bg-4); }
+.ep-cat.on { color: var(--accent-hi); background: var(--accent-lo); }
+
+.ep-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 10px; }
+.ep-h {
+  position: sticky; top: 0; z-index: 1; background: var(--bg-3);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--txt-3); padding: 8px 3px 5px;
+}
+.ep-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; }
+.ep-e {
+  background: none; border: none; cursor: pointer; line-height: 1;
+  font-size: 22px; padding: 5px 0; border-radius: var(--r-xs);
+  /* Keep the grid from reflowing when search hides cells. */
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+.ep-e:hover { background: var(--bg-4); transform: scale(1.18); }
+.ep-e[hidden] { display: none; }
+.ep-none { text-align: center; color: var(--txt-3); font-size: 13px; padding: 28px 0; }
+
+.ep-foot {
+  display: flex; align-items: center; gap: 9px; padding: 7px 11px;
+  border-top: 1px solid var(--line); background: var(--bg-2); min-height: 34px;
+}
+.ep-prev { font-size: 18px; line-height: 1; }
+.ep-name { font-size: 12px; color: var(--txt-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 520px) {
+  .emoji-pick { width: calc(100vw - 20px); height: 60vh; }
+  .ep-row { grid-template-columns: repeat(7, 1fr); }
+}
 
 .editbox { display: flex; flex-direction: column; gap: 6px; margin: 3px 0; }
 .editbox textarea {
