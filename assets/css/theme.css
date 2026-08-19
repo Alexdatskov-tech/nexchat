@@ -1015,3 +1015,6 @@ body.has-bg::before { filter: brightness(var(--dash-bright, 1)); }
 .ice-row .ms { font-family: var(--f-mono); font-size: 11px; }
 .ice-row .ms.fast { color: var(--accent); } .ice-row .ms.mid { color: #E8B04B; }
 .ice-row .ms.slow { color: var(--danger); } .ice-row .ms.dead { color: var(--txt-3); }
+
+.vbtn-fps { width: auto; min-width: 62px; padding: 0 12px; border-radius: 23px;
+            font-family: var(--f-mono); font-size: 12px; font-weight: 600; }

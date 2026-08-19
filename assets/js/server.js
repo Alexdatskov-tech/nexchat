@@ -529,14 +529,19 @@
   // Every participant can contribute two feeds: their camera and their screen.
   function feedsFor(p) {
     const isMe = p.id === me.id;
-    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted);
-    const camS = isMe ? Voice.localCam() : Voice.peerCam(p.id);
-    const scrS = isMe ? Voice.localScreen() : Voice.peerScreen(p.id);
+    const st = Voice.state();
+    // Gate on what the peer says it is sending. Track-level `muted` isn't
+    // dependable in Chrome, so an idle transceiver could still slip through as
+    // an empty black tile — the broadcast flags are authoritative.
+    const wantsCam = isMe ? st.cam : !!p.cam;
+    const wantsScreen = isMe ? st.sharing : !!p.sharing;
+    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live');
+    const camS = wantsCam ? (isMe ? Voice.localCam() : Voice.peerCam(p.id)) : null;
+    const scrS = wantsScreen ? (isMe ? Voice.localScreen() : Voice.peerScreen(p.id)) : null;
+
     const out = [];
-    // Only a stream with an actually-flowing track earns a tile; an idle
-    // transceiver would otherwise show up as an empty black "SCREEN" panel.
-    if (hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
-    if (hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
+    if (wantsScreen && hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
+    if (wantsCam && hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
     if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
     return out;
   }
@@ -556,6 +561,8 @@
     set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple${st.deaf ? '' : ''}"></i>`);
     set('vrCam', 'live', st.cam);
     set('vrShare', 'live', st.sharing);
+    const fpsBtn = $('vrFps');
+    if (fpsBtn) fpsBtn.textContent = Voice.targetFps + 'fps';
     $('vcMute').classList.toggle('on', st.muted);
     $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
     $('vcDeaf').classList.toggle('on', st.deaf);
@@ -660,6 +667,12 @@
     $('vrCam').onclick = () => Voice.toggleCam();
     $('vrShare').onclick = () => Voice.toggleShare();
     $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
+    $('vrFps').onclick = async () => {
+      const next = Voice.targetFps === 60 ? 30 : 60;
+      await Voice.setTargetFps(next);
+      $('vrFps').textContent = next + 'fps';
+      UI.toast(`Targeting ${next} fps.`);
+    };
     $('vrChat').onclick = () => showVoiceRoom(false);
     $('vcDock').addEventListener('click', (e) => {
       // Tapping the dock status area re-opens the full room view.

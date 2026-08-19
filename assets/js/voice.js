@@ -9,6 +9,7 @@ window.Voice = (function () {
   const members = new Map();        // uid -> profile + flags
   let me = null, chan = null, srvId = null;
   let muted = false, deaf = false, cam = false, sharing = false;
+  let targetFps = 60;
   let onChange = () => {}, onSpeak = () => {}, onStats = () => {};
   let actx = null, rafId = null, statTimer = null;
   const meters = new Map();
@@ -146,10 +147,34 @@ window.Voice = (function () {
     rec.ready = true;
   }
 
+  /* Chrome's default is to sacrifice framerate to keep resolution up, which is
+     what pinned us around 25fps. Ask it to do the opposite and give the encoder
+     enough bitrate headroom to actually hit the target. */
+  async function tuneSender(sender, fps, kbps) {
+    if (!sender) return;
+    try {
+      const p = sender.getParameters();
+      p.degradationPreference = 'maintain-framerate';
+      p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
+      p.encodings[0].maxFramerate = fps;
+      p.encodings[0].maxBitrate = kbps * 1000;
+      p.encodings[0].networkPriority = 'high';
+      p.encodings[0].priority = 'high';
+      await sender.setParameters(p);
+    } catch {}
+  }
+
   function applyLocalVideo(rec) {
     try {
-      if (rec.tx.cam) rec.tx.cam.sender.replaceTrack(cam ? camTrack : null);
-      if (rec.tx.screen) rec.tx.screen.sender.replaceTrack(sharing && screen ? screen.getVideoTracks()[0] : null);
+      if (rec.tx.cam) {
+        rec.tx.cam.sender.replaceTrack(cam ? camTrack : null);
+        if (cam) tuneSender(rec.tx.cam.sender, targetFps, 4000);
+      }
+      if (rec.tx.screen) {
+        const st = sharing && screen ? screen.getVideoTracks()[0] : null;
+        rec.tx.screen.sender.replaceTrack(st);
+        if (st) tuneSender(rec.tx.screen.sender, targetFps, 6000);
+      }
     } catch {}
   }
 
@@ -412,9 +437,17 @@ window.Voice = (function () {
     } else {
       try {
         const s = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          video: {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            // min forces the browser to pick a 30fps-capable mode rather than
+            // settling on whatever the sensor defaults to.
+            frameRate: { min: 24, ideal: 60 },
+          },
         });
         camTrack = s.getVideoTracks()[0];
+        // Tells the encoder to protect smoothness over sharpness.
+        try { camTrack.contentHint = 'motion'; } catch {}
         camTrack.onended = () => { cam = false; peers.forEach(applyLocalVideo); pushFlags(); onChange(state()); };
         cam = true;
       } catch { UI.toast('Could not start your camera.', true); return; }
@@ -430,10 +463,12 @@ window.Voice = (function () {
     } else {
       try {
         screen = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: 30, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: { frameRate: { min: 24, ideal: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
-        screen.getVideoTracks()[0].onended = () => { if (sharing) toggleShare(); };
+        const st = screen.getVideoTracks()[0];
+        try { st.contentHint = 'motion'; } catch {}
+        st.onended = () => { if (sharing) toggleShare(); };
         sharing = true;
       } catch { return; }
     }
@@ -466,8 +501,18 @@ window.Voice = (function () {
     return s && s.getVideoTracks().some(liveTrack) ? s : null;
   };
 
+  async function setTargetFps(fps) {
+    targetFps = fps;
+    if (camTrack) { try { await camTrack.applyConstraints({ frameRate: { min: Math.min(24, fps), ideal: fps } }); } catch {} }
+    peers.forEach((rec) => {
+      if (cam) tuneSender(rec.tx.cam?.sender, fps, 4000);
+      if (sharing) tuneSender(rec.tx.screen?.sender, fps, 6000);
+    });
+  }
+
   return {
-    join, leave, setMute, setDeaf, toggleCam, toggleShare, state, speaking,
+    join, leave, setMute, setDeaf, toggleCam, toggleShare, state, speaking, setTargetFps,
+    get targetFps() { return targetFps; },
     localCam, localScreen, peerCam, peerScreen, setManualStun,
     get iceServers() { return iceServers; },
   };
