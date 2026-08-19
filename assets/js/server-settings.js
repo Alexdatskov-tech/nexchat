@@ -427,7 +427,9 @@
     const { data, error } = await window.db.from('servers').select('*').eq('id', sid).single();
     if (error || !data) { UI.toast('Server not found.', true); return; }
     srv = data;
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Presence?.start(me);
+    window.Presence?.onChange(() => window.Presence.refreshDots());
     isOwner = srv.owner_id === me.id;
     $('navTitle').textContent = srv.name;
     document.title = `${srv.name} — Settings`;

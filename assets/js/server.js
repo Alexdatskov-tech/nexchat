@@ -1100,7 +1100,10 @@
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
 
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Presence?.start(me);
+    window.Presence?.onChange(() => window.Presence.refreshDots());
+
     devStats = !!(me.theme && me.theme.dev_mode);
 
     canManage = srv.owner_id === me.id || me.is_platform_admin;
