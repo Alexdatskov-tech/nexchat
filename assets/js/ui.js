@@ -419,6 +419,11 @@ window.UI = (function () {
     return nameFontStack(t.name_font);
   }
 
+  /* Defaults for the chat column's extra blur/dim, shared with the profile
+     editor so the sliders and the renderer cannot drift apart. */
+  const CHAT_BLUR_DEFAULT = 12;
+  const CHAT_DIM_DEFAULT = 42;
+
   /* Applies a user's chosen wallpaper to whatever page is asking. The dashboard
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
@@ -427,7 +432,7 @@ window.UI = (function () {
     const t = theme || {};
     const root = document.documentElement.style;
     if (!t.dash_bg) {
-      document.body.classList.remove('has-bg', 'bg-blur');
+      document.body.classList.remove('has-bg', 'bg-blur', 'chat-blur');
       document.querySelector('.dash-veil')?.remove();
       return;
     }
@@ -439,6 +444,13 @@ window.UI = (function () {
     // Blur is only mounted when actually asked for, so a zero-blur wallpaper
     // costs nothing on the compositor.
     document.body.classList.toggle('bg-blur', (t.dash_blur ?? 0) > 0);
+    // The chat column's own extra treatment, on top of whatever the wallpaper
+    // already has. Defaults match the CSS fallbacks so a profile saved before
+    // these keys existed looks exactly the same as it did.
+    const cBlur = t.chat_blur ?? CHAT_BLUR_DEFAULT;
+    root.setProperty('--chat-blur', cBlur + 'px');
+    root.setProperty('--chat-dim', (t.chat_dim ?? CHAT_DIM_DEFAULT) / 100);
+    document.body.classList.toggle('chat-blur', cBlur > 0);
     if (!document.querySelector('.dash-veil')) {
       const v = document.createElement('div');
       v.className = 'dash-veil';
@@ -453,5 +465,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS };
+  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=31" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=32" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=31" />
+<link rel="stylesheet" href="assets/css/theme.css?v=32" />
 </head>
 <body>
 <div class="set-wrap">
@@ -117,6 +117,20 @@
           <label>Blur</label>
           <div class="range-row"><input type="range" id="fBgBlur" min="0" max="24" value="0"><span id="bgBlurV">0px</span></div>
         </div>
+
+        <div class="bsub" style="margin-top:18px;">
+          Behind the chat only — stacks on top of the settings above, so messages
+          stay readable without flattening the wallpaper everywhere else.
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Chat blur</label>
+          <div class="range-row"><input type="range" id="fChatBlur" min="0" max="24" value="12"><span id="chatBlurV">12px</span></div>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Chat darken</label>
+          <div class="range-row"><input type="range" id="fChatDim" min="0" max="95" value="42"><span id="chatDimV">42%</span></div>
+        </div>
+
         <button class="btn btn-quiet btn-sm" id="bgClear" style="margin-top:14px;">Remove background</button>
       </div>
 
@@ -153,6 +167,13 @@
             Developer mode only. CSS declarations for the ring — no selectors, braces or
             <code>url()</code>. Overrides the halo image above. Leave empty for the default sweep.
           </span>
+          <div class="hint" style="margin-top:10px;">
+            Examples — click one to load it, then tweak. The ring is a circle behind your
+            avatar, so <code>background</code> and <code>animation</code> do most of the work.
+            <code>spin</code> and <code>pulse</code> are built in; you cannot define your own
+            <code>@keyframes</code> here.
+          </div>
+          <div class="halo-egs" id="haloEgs"></div>
         </div>
       </div>
 
@@ -246,16 +267,16 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=31"></script>
-<script src="assets/js/supabase-client.js?v=31"></script>
-<script src="assets/js/ui.js?v=31"></script>
-<script src="assets/js/tiff.js?v=31"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=31"></script>
-<script src="assets/js/ice.js?v=31"></script>
-<script src="assets/js/md.js?v=31"></script>
-<script src="assets/js/presence.js?v=31"></script>
-<script src="assets/js/guard.js?v=31"></script>
-<script src="assets/js/notify.js?v=31"></script>
-<script src="assets/js/profile.js?v=31"></script>
+<script src="assets/js/config.js?v=32"></script>
+<script src="assets/js/supabase-client.js?v=32"></script>
+<script src="assets/js/ui.js?v=32"></script>
+<script src="assets/js/tiff.js?v=32"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=32"></script>
+<script src="assets/js/ice.js?v=32"></script>
+<script src="assets/js/md.js?v=32"></script>
+<script src="assets/js/presence.js?v=32"></script>
+<script src="assets/js/guard.js?v=32"></script>
+<script src="assets/js/notify.js?v=32"></script>
+<script src="assets/js/profile.js?v=32"></script>
 </body>
 </html>

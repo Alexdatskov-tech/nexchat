@@ -13,17 +13,21 @@
     { n: 'Dusk',    v: 'radial-gradient(120% 100% at 20% 0%,#2B2246,#141222 55%,#0B0A11)' },
   ];
   let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
+  // Chat-column overlay, defaulted from UI so the slider and the renderer agree.
+  let chatBlur = UI.CHAT_BLUR_DEFAULT, chatDim = UI.CHAT_DIM_DEFAULT;
 
   // Same applier the rest of the app uses, fed from the in-progress edits so the
   // preview matches exactly what saving will produce.
   function applyBg() {
-    UI.applyBackground({ dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright });
+    UI.applyBackground({ dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim });
   }
   function paintBgUI() {
     document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));
     $('fBgDim').value = bgDim; $('bgDimV').textContent = bgDim + '%';
     $('fBgBlur').value = bgBlur; $('bgBlurV').textContent = bgBlur + 'px';
     $('fBgBright').value = bgBright; $('bgBrightV').textContent = bgBright + '%';
+    $('fChatBlur').value = chatBlur; $('chatBlurV').textContent = chatBlur + 'px';
+    $('fChatDim').value = chatDim; $('chatDimV').textContent = chatDim + '%';
     applyBg();
   }
 
@@ -121,6 +125,8 @@
     r.readAsDataURL(f);
   };
   $('fBgBlur').oninput = (e) => { bgBlur = +e.target.value; paintBgUI(); };
+  $('fChatBlur').oninput = (e) => { chatBlur = +e.target.value; paintBgUI(); };
+  $('fChatDim').oninput = (e) => { chatDim = +e.target.value; paintBgUI(); };
   $('bgClear').onclick = () => {
     bgVal = ''; wpFile = null;
     $('fBgUrl').value = ''; $('fWallpaper').value = '';
@@ -163,6 +169,32 @@
   }
   $('fHalo').oninput = () => paint();
   $('fHaloCss').oninput = () => paint();
+
+  /* Worked examples for the halo. Custom halo CSS is declarations-only -- no
+     braces means no @keyframes of your own -- which is easy to trip over, so
+     these all stick to the animations theme.css already defines (spin, pulse)
+     and each chip previews the ring it produces. */
+  const HALO_EGS = [
+    { n: 'Prism',  css: 'background: conic-gradient(from 0deg,#F0F,#0FF,#FF0,#F0F); animation: spin 2.4s linear infinite;' },
+    { n: 'Ember',  css: 'background: conic-gradient(from 90deg,#E8B04B,#FFE9A8,#C98A20,#E8B04B); animation: spin 6s linear infinite;' },
+    { n: 'Tide',   css: 'background: linear-gradient(135deg,#2FBF87,#3B9EF5); animation: pulse 2s ease-in-out infinite;' },
+    { n: 'Neon',   css: 'background: #E8659A; box-shadow: 0 0 9px 2px rgba(232,101,154,.8);' },
+    { n: 'Static', css: 'background: linear-gradient(90deg,#8B7CF6,#5AC8D8);' },
+  ];
+  (function paintHaloEgs() {
+    const wrap = $('haloEgs');
+    if (!wrap) return;
+    HALO_EGS.forEach((eg) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'halo-eg';
+      b.title = eg.css;
+      b.innerHTML = `<span class="ring"></span>${UI.esc(eg.n)}`;
+      b.querySelector('.ring').style.cssText = eg.css;
+      b.onclick = () => { $('fHaloCss').value = eg.css; paint(); };
+      wrap.appendChild(b);
+    });
+  })();
   $('iceProbe').onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Testing…';
     await ICE.rank(ICE.STUN, true);
@@ -244,6 +276,8 @@
       patch.theme.dash_dim = bgDim;
       patch.theme.dash_blur = bgBlur;
       patch.theme.dash_bright = bgBright;
+      patch.theme.chat_blur = chatBlur;
+      patch.theme.chat_dim = chatDim;
       patch.theme.dev_mode = devMode;
       patch.theme.manual_stun = manualStun;
       if (me.is_nitro) {
@@ -341,6 +375,8 @@
     bgDim = th.dash_dim ?? 0;
     bgBlur = th.dash_blur ?? 0;
     bgBright = th.dash_bright ?? 100;
+    chatBlur = th.chat_blur ?? UI.CHAT_BLUR_DEFAULT;
+    chatDim = th.chat_dim ?? UI.CHAT_DIM_DEFAULT;
     devMode = !!th.dev_mode;
     manualStun = th.manual_stun || [];
     wpFile = null;

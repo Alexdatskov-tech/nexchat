@@ -945,6 +945,22 @@ body.has-bg.bg-blur::before { filter: brightness(var(--dash-bright, 1)) blur(var
 .bg-preset { aspect-ratio: 16/10; border-radius: var(--r-sm); cursor: pointer; border: 2px solid transparent; background-size: cover; background-position: center; position: relative; }
 .bg-preset.on { border-color: var(--accent); }
 .bg-preset span { position: absolute; inset: auto 0 0 0; font-size: 9.5px; text-align: center; padding: 3px; background: rgba(0,0,0,.55); border-radius: 0 0 6px 6px; }
+/* Halo CSS examples: each chip previews the ring it would produce, so the
+   effect is visible before it is applied. */
+.halo-egs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.halo-eg {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 6px 11px 6px 7px; font-size: 12px; color: var(--txt-2);
+  font-family: inherit; transition: border-color .12s, color .12s;
+}
+.halo-eg:hover { border-color: var(--accent); color: var(--txt-1); }
+.halo-eg .ring { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; position: relative; }
+.halo-eg .ring::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%;
+  background: var(--bg-2); border: 1.5px solid var(--bg-2);
+}
+
 .range-row { display: flex; align-items: center; gap: 12px; }
 .range-row input[type=range] { flex: 1; accent-color: var(--accent); }
 .range-row span { font-family: var(--f-mono); font-size: 11.5px; color: var(--txt-3); min-width: 38px; text-align: right; }
@@ -1127,8 +1143,13 @@ body.has-bg .chat { background: transparent; position: relative; z-index: 0; }
 body.has-bg .chat::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: rgba(13, 12, 15, var(--chat-dim, .42));
-  -webkit-backdrop-filter: blur(var(--chat-blur, 22px));
-  backdrop-filter: blur(var(--chat-blur, 22px));
+}
+/* Mounted only when a blur is actually asked for, the same way `.bg-blur` gates
+   the wallpaper's own blur: `blur(0px)` is not free, it still promotes the
+   element to its own compositor layer for no visible gain. */
+body.has-bg.chat-blur .chat::before {
+  -webkit-backdrop-filter: blur(var(--chat-blur, 12px));
+  backdrop-filter: blur(var(--chat-blur, 12px));
 }
 body.has-bg .rail,
 body.has-bg .dm-rail { background: rgba(19, 18, 23, .72); border-right-color: rgba(255,255,255,.10); }

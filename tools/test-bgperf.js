@@ -155,7 +155,12 @@ ok('no duplicate .surface frosted rules', trio.length <= 1, `${trio.length} rule
     ok('  sits behind the messages', /z-index:\s*-1/.test(underlay));
     ok('  does not eat clicks', /pointer-events:\s*none/.test(underlay));
     ok('  dims as well as blurs', /background:\s*rgba/.test(underlay));
-    ok('  has a -webkit- fallback', /-webkit-backdrop-filter/.test(underlay));
+    // The blur itself is gated behind .chat-blur so that blur=0 does not
+    // promote a compositor layer for nothing; the dim stays unconditional.
+    const gated = (bare.match(/body\.has-bg\.chat-blur\s+\.chat::before\s*\{[^}]*\}/) || [])[0] || '';
+    ok('  blur is gated behind .chat-blur', /backdrop-filter:\s*blur/.test(gated));
+    ok('  has a -webkit- fallback', /-webkit-backdrop-filter/.test(gated));
+    ok('  ungated rule applies no blur', !/backdrop-filter/.test(underlay));
     ok('  .chat owns the stacking context',
        /body\.has-bg\s+\.chat\s*\{[^}]*position:\s*relative[^}]*\}/.test(bare));
     ok('  .chat is not itself a scroll container',
