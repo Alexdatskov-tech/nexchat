@@ -529,11 +529,14 @@
   // Every participant can contribute two feeds: their camera and their screen.
   function feedsFor(p) {
     const isMe = p.id === me.id;
+    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted);
     const camS = isMe ? Voice.localCam() : Voice.peerCam(p.id);
     const scrS = isMe ? Voice.localScreen() : Voice.peerScreen(p.id);
     const out = [];
-    if (scrS) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
-    if (camS) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
+    // Only a stream with an actually-flowing track earns a tile; an idle
+    // transceiver would otherwise show up as an empty black "SCREEN" panel.
+    if (hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
+    if (hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
     if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
     return out;
   }

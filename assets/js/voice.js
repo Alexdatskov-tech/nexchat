@@ -51,6 +51,7 @@ window.Voice = (function () {
     const rec = {
       pc, tx: { audio: null, cam: null, screen: null },
       audioStream: new MediaStream(), camStream: new MediaStream(), screenStream: new MediaStream(),
+      recv: new Map(),          // transceiver -> received video track
       queue: [], ready: false,
     };
     peers.set(uid, rec);
@@ -64,13 +65,13 @@ window.Voice = (function () {
         attachAudio(uid, rec);
         if (!meters.has(uid)) meter(uid, rec.audioStream);
       } else {
-        // Which video slot this is depends on m-line order: cam first, screen second.
-        const target = tx === rec.tx.screen ? rec.screenStream : rec.camStream;
-        target.getVideoTracks().forEach((old) => target.removeTrack(old));
-        target.addTrack(tr);
-        tr.onended = () => { target.removeTrack(tr); onChange(state()); };
-        tr.onmute = () => onChange(state());
-        tr.onunmute = () => onChange(state());
+        // ontrack can fire before the answerer has mapped its transceivers, so
+        // just record the track and let rebuildVideo() decide where it belongs.
+        rec.recv.set(tx, tr);
+        tr.onended = () => { rec.recv.delete(tx); rebuildVideo(rec); onChange(state()); };
+        tr.onmute = () => { rebuildVideo(rec); onChange(state()); };
+        tr.onunmute = () => { rebuildVideo(rec); onChange(state()); };
+        rebuildVideo(rec);
       }
       onChange(state());
     };
@@ -83,6 +84,34 @@ window.Voice = (function () {
       onChange(state());
     };
     return rec;
+  }
+
+  /* A transceiver that nobody is sending on still hands us a receiver track —
+     it just stays muted and never delivers frames. Those phantom tracks are
+     what produced empty "SCREEN" tiles and black camera tiles, so only tracks
+     that are live AND unmuted count as a real feed. */
+  const liveTrack = (t) => !!t && t.readyState === 'live' && !t.muted;
+
+  function setStream(stream, track) {
+    const cur = stream.getVideoTracks();
+    if (track && cur.length === 1 && cur[0] === track) return false;
+    cur.forEach((t) => stream.removeTrack(t));
+    if (track) stream.addTrack(track);
+    return true;
+  }
+
+  /* Slot the received video tracks by m-line position: first video transceiver
+     is the camera, second is the screen. Works on both sides of the call and
+     re-runs whenever a track mutes, unmutes or ends. */
+  function rebuildVideo(rec) {
+    const vids = rec.pc.getTransceivers().filter((t) =>
+      (t.receiver.track && t.receiver.track.kind === 'video') || rec.recv.has(t));
+    const camTx = vids[0], scrTx = vids[1];
+    const camT = camTx ? (rec.recv.get(camTx) || camTx.receiver.track) : null;
+    const scrT = scrTx ? (rec.recv.get(scrTx) || scrTx.receiver.track) : null;
+    const a = setStream(rec.camStream, liveTrack(camT) ? camT : null);
+    const b = setStream(rec.screenStream, liveTrack(scrT) ? scrT : null);
+    return a || b;
   }
 
   /* Offerer builds the m-line layout: audio, camera video, screen video. */
@@ -113,6 +142,7 @@ window.Voice = (function () {
       [rec.tx.cam, rec.tx.screen].forEach((t) => { if (t) t.direction = 'sendrecv'; });
     } catch {}
     applyLocalVideo(rec);
+    rebuildVideo(rec);
     rec.ready = true;
   }
 
@@ -324,7 +354,13 @@ window.Voice = (function () {
       }
     });
 
-    statTimer = setInterval(pollStats, 1000);
+    statTimer = setInterval(() => {
+      pollStats();
+      // Some browsers fire mute/unmute inconsistently, so re-derive each tick.
+      let changed = false;
+      peers.forEach((rec) => { if (rebuildVideo(rec)) changed = true; });
+      if (changed) onChange(state());
+    }, 1000);
     onChange(state());
     return true;
   }
@@ -415,10 +451,20 @@ window.Voice = (function () {
     return iceServers;
   }
 
-  const localCam = () => (cam && camTrack ? new MediaStream([camTrack]) : null);
-  const localScreen = () => (sharing && screen ? new MediaStream(screen.getVideoTracks()) : null);
-  const peerCam = (uid) => { const s = peers.get(uid)?.camStream; return s && s.getVideoTracks().length ? s : null; };
-  const peerScreen = (uid) => { const s = peers.get(uid)?.screenStream; return s && s.getVideoTracks().length ? s : null; };
+  const localCam = () => (cam && camTrack && camTrack.readyState === 'live' ? new MediaStream([camTrack]) : null);
+  const localScreen = () => {
+    if (!sharing || !screen) return null;
+    const t = screen.getVideoTracks().filter((x) => x.readyState === 'live');
+    return t.length ? new MediaStream(t) : null;
+  };
+  const peerCam = (uid) => {
+    const s = peers.get(uid)?.camStream;
+    return s && s.getVideoTracks().some(liveTrack) ? s : null;
+  };
+  const peerScreen = (uid) => {
+    const s = peers.get(uid)?.screenStream;
+    return s && s.getVideoTracks().some(liveTrack) ? s : null;
+  };
 
   return {
     join, leave, setMute, setDeaf, toggleCam, toggleShare, state, speaking,
