@@ -683,6 +683,13 @@ input[type=file]::file-selector-button:hover { background: var(--bg-4); }
 .lrow .lmain b { display: block; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .lrow .lmain small { font-size: 11.5px; color: var(--txt-3); }
 .lrow .lacts { display: flex; gap: 6px; flex-shrink: 0; }
+/* An appeal is prose, not a one-line summary, so it gets room to wrap. */
+.appeal-msg {
+  margin-top: 7px; padding: 9px 11px; border-radius: var(--r-sm);
+  background: var(--bg-1); border: 1px solid var(--line);
+  font-size: 13px; line-height: 1.5; color: var(--txt-2);
+  white-space: pre-wrap; word-break: break-word;
+}
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; }
 
@@ -1093,6 +1100,43 @@ body.has-bg .userchip { background: rgba(255,255,255,.09); border-color: rgba(25
 /* Brightness lives on the image layer; the veil only ever darkens. */
 body.has-bg::before { filter: brightness(var(--dash-bright, 1)); }
 
+/* ----------------------------------------------------------------------------
+   The wallpaper follows the user into DMs and server channels. Every opaque
+   panel in the chat shell has to step back for it, but deliberately with flat
+   alpha rather than backdrop-filter: the message list and the conversation list
+   are the two things that scroll, and re-sampling a blurred backdrop underneath
+   them every frame is exactly the tearing that was just fixed.
+   ---------------------------------------------------------------------------- */
+body.has-bg .shell { background: transparent; }
+body.has-bg .chat { background: transparent; }
+body.has-bg .rail,
+body.has-bg .dm-rail { background: rgba(19, 18, 23, .72); border-right-color: rgba(255,255,255,.10); }
+body.has-bg .chat-head { background: rgba(13, 12, 15, .58); border-bottom-color: rgba(255,255,255,.10); }
+body.has-bg .rail-head { border-bottom-color: rgba(255,255,255,.10); }
+body.has-bg .rail-foot { border-top-color: rgba(255,255,255,.10); }
+body.has-bg .dm-search { border-bottom-color: rgba(255,255,255,.10); }
+
+/* Rows need a touch more contrast against a photo than against flat grey. */
+body.has-bg .dm-item:hover,
+body.has-bg .chan:hover { background: rgba(255,255,255,.07); }
+body.has-bg .dm-item.on,
+body.has-bg .chan.on { background: rgba(255,255,255,.12); }
+body.has-bg .dm-tabs button.on { background: rgba(255,255,255,.12); }
+body.has-bg .rail-foot .me:hover { background: rgba(255,255,255,.07); }
+
+/* Messages sit directly on the wallpaper, so the text needs its own shadow to
+   stay legible over a busy image. */
+body.has-bg .m-text,
+body.has-bg .m-name,
+body.has-bg .m-head { text-shadow: 0 1px 3px rgba(0,0,0,.75); }
+body.has-bg .m:hover { background: rgba(255,255,255,.06); }
+body.has-bg .msgs-top p { color: var(--txt-1); text-shadow: 0 1px 3px rgba(0,0,0,.75); }
+
+body.has-bg .composer-inner { background: rgba(26, 25, 31, .82); border-color: rgba(255,255,255,.14); }
+body.has-bg .composer-hint { text-shadow: 0 1px 3px rgba(0,0,0,.75); }
+body.has-bg .m-text code,
+body.has-bg .m-text pre { background: rgba(13, 12, 15, .74); border-color: rgba(255,255,255,.12); }
+
 /* ============================================================================
    USER PROFILE POPOVER
    ============================================================================ */
@@ -1329,8 +1373,9 @@ body.is-banned { overflow: hidden; }
   word-break: break-word; white-space: pre-wrap;
 }
 
+.ban-acts { margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .ban-btn {
-  margin-top: 26px; padding: 12px 28px; border-radius: var(--r-sm); cursor: pointer;
+  padding: 12px 28px; border-radius: var(--r-sm); cursor: pointer;
   font-family: var(--f-body); font-size: 14px; font-weight: 700;
   color: #2A0508; background: linear-gradient(180deg, #FF7B80, #E5484D);
   border: none; box-shadow: 0 8px 24px -8px rgba(229,72,77,.8);
@@ -1338,6 +1383,36 @@ body.is-banned { overflow: hidden; }
 }
 .ban-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
 .ban-btn:disabled { opacity: .6; cursor: default; }
+/* The appeal is the secondary path -- present, but not competing with sign out. */
+.ban-btn-quiet {
+  background: rgba(255,255,255,.07); color: #FFD9DA;
+  border: 1px solid rgba(229,72,77,.45); box-shadow: none;
+}
+.ban-btn-quiet:hover:not(:disabled) { background: rgba(255,255,255,.12); }
+.ban-btn-sm { padding: 9px 18px; font-size: 13px; }
+
+.ban-appeal {
+  margin-top: 20px; text-align: left; border-radius: var(--r-md);
+  background: rgba(0,0,0,.34); border: 1px solid rgba(229,72,77,.28); padding: 16px;
+  animation: banCard 300ms var(--spring) both;
+}
+.ban-appeal label {
+  display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: #FF8085; margin-bottom: 8px;
+}
+.ban-appeal textarea {
+  width: 100%; resize: vertical; border-radius: var(--r-sm); padding: 10px 12px;
+  font-family: var(--f-body); font-size: 14px; line-height: 1.5; color: #FBE9EA;
+  background: rgba(0,0,0,.45); border: 1px solid rgba(229,72,77,.32); outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.ban-appeal textarea:focus { border-color: #FF7B80; box-shadow: 0 0 0 3px rgba(229,72,77,.22); }
+.ban-appeal textarea::placeholder { color: #B98A8D; }
+.ban-appeal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.ban-count { font-family: var(--f-mono); font-size: 11px; color: #C79A9D; }
+.ban-note { margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: #E8C4C6; }
+.ban-note.bad { color: #FF9A9E; }
+.ban-note.ok { color: #9BE6C0; margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .ban-screen::before, .ban-icon, .ban-title::before, .ban-title::after { animation: none; }

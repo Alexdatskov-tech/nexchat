@@ -859,6 +859,7 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (me) {
+      UI.applyBackground(me.theme);
       window.Notify?.start(me);
       window.Guard?.start(me);
       window.Presence?.start(me);

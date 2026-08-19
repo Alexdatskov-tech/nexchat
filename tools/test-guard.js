@@ -18,7 +18,8 @@ function harness({ banned = false, reason = null } = {}) {
   const w = dom.window;
   w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
 
-  const state = { banned, reason, signedOut: false, removed: [], handlers: [], subscribed: false, selects: 0, paused: [] };
+  const state = { banned, reason, signedOut: false, removed: [], handlers: [], subscribed: false,
+                  selects: 0, paused: [], inserts: [], insertError: null };
   w.HTMLMediaElement.prototype.pause = function () { state.paused.push(this.id); };
 
   const chan = {
@@ -30,7 +31,7 @@ function harness({ banned = false, reason = null } = {}) {
     channel: () => chan,
     removeChannel: (c) => state.removed.push(c),
     auth: { signOut: async () => { state.signedOut = true; } },
-    from: () => ({
+    from: (table) => ({
       select: () => ({
         eq: () => ({
           single: async () => {
@@ -39,6 +40,10 @@ function harness({ banned = false, reason = null } = {}) {
           },
         }),
       }),
+      insert: async (row) => {
+        state.inserts.push({ table, row });
+        return { error: state.insertError };
+      },
     }),
   };
   // jsdom refuses to let window.location be replaced, so guard.js is evaluated
@@ -180,9 +185,112 @@ function harness({ banned = false, reason = null } = {}) {
     ok(`${p}.js starts the guard`, /window\.Guard\?\.start\(me\);/.test(js));
   }
 
-  /* ---- 10. ban screen styling exists ---- */
+  /* ---- 10. appealing a ban ---- */
+  {
+    const { w, state } = harness();
+    w.Guard.start({ id: 'u7', is_banned: true, ban_reason: 'Spam' });
+    await tick(30);
+    const ov = w.document.querySelector('.ban-screen');
+
+    ok('appeal button offered', !!ov.querySelector('#banAppeal'));
+    ok('appeal form starts hidden', ov.querySelector('#banForm').classList.contains('hidden'));
+
+    ov.querySelector('#banAppeal').onclick();
+    await tick(20);
+    ok('appeal form opens', !ov.querySelector('#banForm').classList.contains('hidden'));
+    ok('button becomes a cancel', /Cancel/.test(ov.querySelector('#banAppeal').textContent));
+
+    // Too short -- must not reach the database.
+    const form = ov.querySelector('#banForm');
+    ov.querySelector('#banMsg').value = 'nope';
+    await form.onsubmit({ preventDefault() {} });
+    await tick(20);
+    ok('a too-short appeal is refused', state.inserts.length === 0);
+    ok('  and says why', /at least a sentence/i.test(ov.querySelector('#banNote').textContent));
+
+    // A real appeal.
+    ov.querySelector('#banMsg').value = 'I believe this ban was a mistake, please review it.';
+    await form.onsubmit({ preventDefault() {} });
+    await tick(30);
+    ok('appeal inserted', state.inserts.length === 1);
+    ok('  into ban_appeals', state.inserts[0]?.table === 'ban_appeals');
+    ok('  attributed to the user', state.inserts[0]?.row.user_id === 'u7');
+    ok('  carrying the message', /this ban was a mistake/.test(state.inserts[0]?.row.message || ''));
+    ok('confirmation replaces the form', /Appeal submitted/.test(ov.querySelector('.ban-appeal').textContent));
+    ok('appeal button removed once filed', !ov.querySelector('#banAppeal'));
+  }
+
+  /* ---- 11. a duplicate appeal is reported, not swallowed ---- */
+  {
+    const { w, state } = harness();
+    w.Guard.start({ id: 'u8', is_banned: true, ban_reason: 'Spam' });
+    await tick(30);
+    const ov = w.document.querySelector('.ban-screen');
+    state.insertError = { message: 'duplicate key value violates unique constraint' };
+    ov.querySelector('#banAppeal').onclick();
+    ov.querySelector('#banMsg').value = 'Please have another look at this, it was not me.';
+    await ov.querySelector('#banForm').onsubmit({ preventDefault() {} });
+    await tick(30);
+    ok('duplicate appeal explained plainly',
+       /already have an appeal/i.test(ov.querySelector('#banNote').textContent));
+    ok('  and the button is re-enabled', ov.querySelector('#banSend').disabled === false);
+  }
+
+  /* ---- 12. the sign-in page shows the same card ---- */
+  {
+    const auth = fs.readFileSync(path.join(APP, 'assets/js/auth.js'), 'utf8');
+    ok('sign-in uses the ban screen', /window\.Guard\.screen\(/.test(auth));
+    ok('  passing the reason', /reason: p\.ban_reason/.test(auth));
+    ok('  passing the user id so appeals work', /userId: data\.user\.id/.test(auth));
+    ok('  no longer just an error string', !/setErr\('errIn', 'This account is banned/.test(auth));
+    ok('  signs out on dismiss', /auth\.signOut\(\)/.test(auth));
+    const idx = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
+    ok('index.html loads guard.js', /assets\/js\/guard\.js\?v=\d+/.test(idx));
+    ok('  before auth.js',
+       idx.indexOf('guard.js') < idx.indexOf('auth.js'));
+  }
+
+  /* ---- 13. screen() works with no session at all ---- */
+  {
+    const { w } = harness();
+    let exited = false;
+    w.Guard.screen({ reason: 'Nope', exitText: 'Back to sign in', onExit: () => { exited = true; } });
+    const ov = w.document.querySelector('.ban-screen');
+    ok('screen() renders without start()', !!ov);
+    ok('  no appeal form without a user id', !ov.querySelector('#banForm'));
+    ok('  custom button label used', /Back to sign in/.test(ov.querySelector('#banOut').textContent));
+    ov.querySelector('#banOut').onclick();
+    await tick(20);
+    ok('  custom exit handler runs', exited === true);
+  }
+
+  /* ---- 14. admin review surface ---- */
+  {
+    const adminJs = fs.readFileSync(path.join(APP, 'assets/js/admin.js'), 'utf8');
+    const adminHtml = fs.readFileSync(path.join(APP, 'admin.html'), 'utf8');
+    ok('admin has an appeals pane', /data-pane="appeals"/.test(adminHtml));
+    ok('admin has an appeals tab', /data-tab="appeals"/.test(adminHtml));
+    ok('admin loads appeals', /from\('ban_appeals'\)/.test(adminJs));
+    ok('admin resolves via the rpc', /rpc\('resolve_ban_appeal'/.test(adminJs));
+    ok('appeal text is escaped', /UI\.esc\(a\.message\)/.test(adminJs));
+  }
+
+  /* ---- 15. the migration is present ---- */
+  {
+    const sql = fs.readFileSync(path.join(APP, 'nexchat_patch6.sql'), 'utf8');
+    ok('patch6 creates ban_appeals', /create table if not exists public\.ban_appeals/.test(sql));
+    ok('patch6 enables RLS on it', /alter table public\.ban_appeals enable row level security/.test(sql));
+    ok('patch6 limits one pending appeal', /unique index[\s\S]{0,120}where status = 'pending'/.test(sql));
+    ok('patch6 publishes profiles to realtime', /add table public\.profiles/.test(sql));
+    ok('patch6 sets replica identity on profiles', /alter table public\.profiles replica identity full/.test(sql));
+    ok('patch6 lets a user read their own row', /profiles_select_self/.test(sql));
+    ok('patch6 unbans on acceptance', /set is_banned = false/.test(sql));
+  }
+
+  /* ---- 16. ban screen styling exists ---- */
   const css = fs.readFileSync(path.join(APP, 'assets/css/theme.css'), 'utf8');
-  for (const sel of ['.ban-screen', '.ban-card', '.ban-title', '.ban-reason', '.ban-btn', '.is-banned']) {
+  for (const sel of ['.ban-screen', '.ban-card', '.ban-title', '.ban-reason', '.ban-btn', '.is-banned',
+                     '.ban-appeal', '.ban-acts', '.ban-btn-quiet', '.appeal-msg']) {
     ok(`${sel} styled`, new RegExp(sel.replace('.', '\\.')).test(css));
   }
   ok('ban screen sits above everything', /\.ban-screen[\s\S]{0,400}z-index:\s*\d{4,}/.test(css));

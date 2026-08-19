@@ -417,6 +417,33 @@ window.UI = (function () {
     return nameFontStack(t.name_font);
   }
 
+  /* Applies a user's chosen wallpaper to whatever page is asking. The dashboard
+     grid, the profile editor, DMs and server channels all read the same
+     profiles.theme keys, so the wallpaper follows the user around the app
+     instead of only dressing the portal. */
+  function applyBackground(theme) {
+    const t = theme || {};
+    const root = document.documentElement.style;
+    if (!t.dash_bg) {
+      document.body.classList.remove('has-bg', 'bg-blur');
+      document.querySelector('.dash-veil')?.remove();
+      return;
+    }
+    document.body.classList.add('has-bg');
+    root.setProperty('--dash-bg', t.dash_bg);
+    root.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
+    root.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
+    root.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
+    // Blur is only mounted when actually asked for, so a zero-blur wallpaper
+    // costs nothing on the compositor.
+    document.body.classList.toggle('bg-blur', (t.dash_blur ?? 0) > 0);
+    if (!document.querySelector('.dash-veil')) {
+      const v = document.createElement('div');
+      v.className = 'dash-veil';
+      document.body.appendChild(v);
+    }
+  }
+
   function applyServerName(theme) {
     const root = document.documentElement.style;
     const col = theme?.name_color;
@@ -424,5 +451,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS };
+  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS };
 })();

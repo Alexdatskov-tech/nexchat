@@ -8,24 +8,8 @@
   const DEFAULT_BANNER = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
   function banner() { return DEFAULT_BANNER; }
 
-  // Applies the saved dashboard background from profiles.theme.
-  function applyDashboardBg(theme) {
-    const t = theme || {};
-    if (!t.dash_bg) { document.body.classList.remove('has-bg'); return; }
-    document.body.classList.add('has-bg');
-    document.documentElement.style.setProperty('--dash-bg', t.dash_bg);
-    document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
-    document.documentElement.style.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
-    document.documentElement.style.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
-    // Blur is only mounted when actually asked for, so a zero-blur wallpaper
-    // costs nothing.
-    document.body.classList.toggle('bg-blur', (t.dash_blur ?? 0) > 0);
-    if (!document.querySelector('.dash-veil')) {
-      const v = document.createElement('div');
-      v.className = 'dash-veil';
-      document.body.appendChild(v);
-    }
-  }
+  // The wallpaper is shared with DMs and server channels, so the work lives in UI.
+  const applyDashboardBg = (theme) => UI.applyBackground(theme);
 
   /* Each card carries its own server's name styling, so one global variable
      cannot be used here the way it is on a single-server page. */

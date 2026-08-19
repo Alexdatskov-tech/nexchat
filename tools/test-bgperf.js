@@ -59,12 +59,88 @@ ok('  topbar promoted', /translateZ\(0\)/.test(topbar || ''));
 const trio = bare.match(/body\.has-bg\s+\.surface\s*\{[^}]*\}/g) || [];
 ok('no duplicate .surface frosted rules', trio.length <= 1, `${trio.length} rules`);
 
-/* ---- 6. bg-blur class is only applied when blur > 0 ---- */
-for (const [file, fn] of [['portal.js', 'applyDashboardBg'], ['profile.js', 'applyBg']]) {
-  const js = fs.readFileSync(path.join(APP, `assets/js/${file}`), 'utf8');
-  ok(`${file} toggles bg-blur`, /classList\.toggle\('bg-blur',/.test(js));
-  ok(`  ${file} gates it on a positive blur`, /classList\.toggle\('bg-blur',\s*\(?[\w.?\s??]+\)?\s*>\s*0\)/.test(js));
-  ok(`  ${fn} still present`, new RegExp(`function ${fn}`).test(js));
+/* ---- 6. one shared applier, used by every page that shows the wallpaper ---- */
+{
+  const ui = fs.readFileSync(path.join(APP, 'assets/js/ui.js'), 'utf8');
+  ok('ui.js owns applyBackground', /function applyBackground\s*\(/.test(ui));
+  ok('  it is exported', /applyBackground/.test(ui.slice(ui.lastIndexOf('window.UI'))) ||
+     /applyBackground,/.test(ui));
+  ok('  gated on a positive blur',
+     /classList\.toggle\('bg-blur',\s*\(?[\w.?\s??]+\)?\s*>\s*0\)/.test(ui));
+  ok('  no background-attachment anywhere in it', !/background-attachment/.test(ui));
+
+  // Behavioural: drive the real applier through the states a user can produce.
+  {
+    const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>',
+      { runScripts: 'outside-only', url: 'https://nexchat.example/dms.html' });
+    const w = dom.window;
+    w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
+    // eslint-disable-next-line no-new-func
+    new w.Function('window', 'document', 'console', ui)
+      .call(w, w, w.document, console);
+    const B = w.document.body;
+    const css = () => w.document.documentElement.style;
+
+    w.UI.applyBackground({ dash_bg: 'https://cdn/x.jpg', dash_dim: 40, dash_blur: 0, dash_bright: 90 });
+    ok('  wallpaper mounts has-bg', B.classList.contains('has-bg'));
+    ok('    zero blur mounts no filter layer', !B.classList.contains('bg-blur'));
+    ok('    veil inserted once', w.document.querySelectorAll('.dash-veil').length === 1);
+    ok('    image variable set', css().getPropertyValue('--dash-bg').includes('x.jpg'));
+    ok('    dim normalised to 0-1', css().getPropertyValue('--dash-dim') === '0.4');
+    ok('    brightness normalised to 0-1', css().getPropertyValue('--dash-bright') === '0.9');
+
+    w.UI.applyBackground({ dash_bg: 'https://cdn/x.jpg', dash_blur: 12 });
+    ok('  a positive blur mounts the filter layer', B.classList.contains('bg-blur'));
+    ok('    blur carries px units', css().getPropertyValue('--dash-blur') === '12px');
+    ok('    veil is not duplicated', w.document.querySelectorAll('.dash-veil').length === 1);
+
+    w.UI.applyBackground({});
+    ok('  clearing the wallpaper unmounts has-bg', !B.classList.contains('has-bg'));
+    ok('    and the filter layer', !B.classList.contains('bg-blur'));
+    ok('    and removes the veil', w.document.querySelectorAll('.dash-veil').length === 0);
+
+    w.UI.applyBackground(null);
+    ok('  a missing theme is survivable', !B.classList.contains('has-bg'));
+  }
+
+  // Every surface that should carry the wallpaper must go through it, and none
+  // of them may keep a private copy of the logic.
+  for (const file of ['portal.js', 'profile.js', 'dms.js', 'server.js']) {
+    const js = fs.readFileSync(path.join(APP, `assets/js/${file}`), 'utf8');
+    ok(`${file} applies the wallpaper via UI.applyBackground`,
+       /UI\.applyBackground\(/.test(js));
+    ok(`  ${file} does not re-implement the toggle`,
+       !/classList\.toggle\('has-bg',/.test(js));
+  }
+}
+
+/* ---- 6b. the chat shell is see-through when a wallpaper is set ---- */
+{
+  const block = (sel) => {
+    const m = bare.match(new RegExp(`body\\.has-bg\\s+${sel}[^{]*\\{[^}]*\\}`));
+    return m ? m[0] : null;
+  };
+  for (const sel of ['\\.shell', '\\.rail', '\\.dm-rail', '\\.chat-head', '\\.composer-inner']) {
+    ok(`${sel.replace(/\\\\/g, '')} is translucent over a wallpaper`, !!block(sel));
+  }
+  // Channel rows: the class is .chan, not .ch-item -- a wrong selector here is
+  // silent, so pin it against the markup the app actually emits.
+  const srv = fs.readFileSync(path.join(APP, 'assets/js/server.js'), 'utf8');
+  ok('server.js emits .chan rows', /class="chan/.test(srv));
+  ok('has-bg styles .chan rows', /body\.has-bg\s+\.chan/.test(bare));
+  ok('has-bg does not style a non-existent .ch-item', !/\.ch-item/.test(bare));
+  ok('has-bg styles .dm-item rows', /body\.has-bg\s+\.dm-item/.test(bare));
+
+  // Scroll tearing came from blurring a scrolling layer; the chat shell rules
+  // must stay flat-alpha.
+  const shellRules = bare.match(/body\.has-bg\s+\.(shell|chat|rail|dm-rail|msgs|composer-inner|chan|dm-item)[^{]*\{[^}]*\}/g) || [];
+  ok('chat-shell rules exist', shellRules.length >= 5, `${shellRules.length} rules`);
+  ok('  and none of them blur a scrolling layer',
+     !shellRules.some((r) => /backdrop-filter/.test(r)));
+
+  // Text over a photo needs a shadow to stay readable.
+  ok('message text gets a shadow over a wallpaper',
+     /body\.has-bg[^{]*\.m-text[^{]*\{[^}]*text-shadow/.test(bare));
 }
 
 /* ---- 7. behavioural: the class actually tracks the slider ---- */

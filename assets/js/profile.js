@@ -14,17 +14,10 @@
   ];
   let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
 
+  // Same applier the rest of the app uses, fed from the in-progress edits so the
+  // preview matches exactly what saving will produce.
   function applyBg() {
-    if (!bgVal) { document.body.classList.remove('has-bg'); return; }
-    document.body.classList.add('has-bg');
-    document.documentElement.style.setProperty('--dash-bg', bgVal);
-    document.documentElement.style.setProperty('--dash-dim', bgDim / 100);
-    document.documentElement.style.setProperty('--dash-blur', bgBlur + 'px');
-    document.documentElement.style.setProperty('--dash-bright', bgBright / 100);
-    document.body.classList.toggle('bg-blur', bgBlur > 0);
-    if (!document.querySelector('.dash-veil')) {
-      const v = document.createElement('div'); v.className = 'dash-veil'; document.body.appendChild(v);
-    }
+    UI.applyBackground({ dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright });
   }
   function paintBgUI() {
     document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));

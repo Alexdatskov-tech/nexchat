@@ -8,6 +8,7 @@
       b.classList.add('on');
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       if (b.dataset.tab === 'users') loadUsers();
+      if (b.dataset.tab === 'appeals') loadAppeals();
       window.scrollTo(0, 0);
     };
   });
@@ -53,6 +54,51 @@
         UI.toast(error ? error.message : 'Request declined.', !!error);
         loadRequests();
       });
+    });
+  }
+
+  async function loadAppeals() {
+    const { data, error } = await window.db.from('ban_appeals')
+      .select('*, profiles!user_id(username,display_name,avatar_url,accent_color,is_banned)')
+      .order('created_at', { ascending: false });
+    if (error) return UI.toast(error.message, true);
+
+    const pending = (data || []).filter((a) => a.status === 'pending');
+    $('appealCount').innerHTML = pending.length
+      ? `<span class="badge badge-admin" style="margin-left:auto;">${pending.length}</span>` : '';
+
+    $('appealRows').innerHTML = (data || []).map((a) => {
+      const p = a.profiles || { username: 'unknown' };
+      const tag = a.status === 'pending' ? ''
+        : `<span class="badge ${a.status === 'accepted' ? 'badge-admin' : 'badge-owner'}">${a.status}</span>`;
+      return `<div class="lrow" data-id="${a.id}" style="align-items:flex-start;">
+        ${UI.avatar(p, 32)}
+        <div class="lmain">
+          <b>${UI.esc(p.display_name || p.username)} ${tag}</b>
+          <small>@${UI.esc(p.username)} · ${new Date(a.created_at).toLocaleString()}</small>
+          <div class="appeal-msg">${UI.esc(a.message)}</div>
+          ${a.review_note ? `<small style="display:block;margin-top:6px;">Note: ${UI.esc(a.review_note)}</small>` : ''}
+        </div>
+        ${a.status === 'pending' ? `<div class="lacts">
+          <button class="btn btn-quiet btn-sm a-no">Decline</button>
+          <button class="btn btn-primary btn-sm a-yes">Accept &amp; unban</button>
+        </div>` : ''}
+      </div>`;
+    }).join('') || '<div class="empty"><div class="ico"><i class="fa-solid fa-gavel"></i></div><h3>No appeals</h3><p>Appeals from banned accounts land here.</p></div>';
+
+    $('appealRows').querySelectorAll('.lrow').forEach((row) => {
+      const id = row.dataset.id;
+      const resolve = async (accept, note) => {
+        const { error } = await window.db.rpc('resolve_ban_appeal',
+          { p_appeal_id: id, p_accept: accept, p_note: note });
+        if (error) return UI.toast(error.message, true);
+        UI.toast(accept ? 'Appeal accepted — account restored.' : 'Appeal declined.');
+        // The ban state just changed underneath the cached user list.
+        users = [];
+        loadAppeals();
+      };
+      row.querySelector('.a-yes')?.addEventListener('click', () => resolve(true, null));
+      row.querySelector('.a-no')?.addEventListener('click', () => resolve(false, prompt('Reason (optional)') || null));
     });
   }
 
@@ -114,5 +160,6 @@
     window.Presence?.onChange(() => window.Presence.refreshDots());
     $('wrap').classList.remove('hidden');
     loadRequests();
+    loadAppeals();
   })();
 })();

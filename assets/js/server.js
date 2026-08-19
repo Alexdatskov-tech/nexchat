@@ -1101,6 +1101,7 @@
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
 
+    UI.applyBackground(me.theme);
     window.Notify?.start(me);
     window.Guard?.start(me);
     window.Presence?.start(me);

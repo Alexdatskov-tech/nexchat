@@ -64,8 +64,19 @@
 
       const { data: p } = await window.db.from('profiles').select('is_banned, ban_reason').eq('id', data.user.id).single();
       if (p?.is_banned) {
-        await window.db.auth.signOut();
-        return setErr('errIn', 'This account is banned' + (p.ban_reason ? `: ${p.ban_reason}` : '.'));
+        /* The session stays open just long enough to file an appeal -- the
+           insert has to be attributable to the account, and RLS checks
+           auth.uid() against it. Dismissing the card signs out properly. */
+        window.Guard.screen({
+          reason: p.ban_reason,
+          userId: data.user.id,
+          exitText: 'Back to sign in',
+          onExit: async () => {
+            try { await window.db.auth.signOut(); } catch {}
+            window.location.reload();
+          },
+        });
+        return;
       }
       window.location.href = 'portal.html';
     } catch (err) {
