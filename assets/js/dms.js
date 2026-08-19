@@ -4,6 +4,7 @@
   let me = null, tab = 'friends', convs = [], friends = [], requests = [], outgoing = [];
   let active = null, sub = null, pending = [];
   const profiles = {}, attCache = {};
+  const painting = new Set();   // in-flight appendMessage ids (dedupe guard)
 
   async function profileOf(id) {
     if (profiles[id]) return profiles[id];
@@ -387,32 +388,88 @@
     };
   }
 
+  /* Rendering must not depend on the realtime echo — see server.js for the
+     same pattern. Realtime, polling and your own send all go through here. */
+  async function appendMessage(m) {
+    const box = $('msgs');
+    if (!box || !active) return null;
+    if (m.conversation_id && m.conversation_id !== active.id) return null;
+    if (document.querySelector(`.m[data-id="${m.id}"]`) || painting.has(m.id)) return null;
+    painting.add(m.id);
+    try {
+    await profileOf(m.author_id);
+    if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+    const last = box.querySelector('.m:last-of-type');
+    box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
+    const el = box.lastElementChild;
+    wire(el);
+    if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+    return el;
+    } finally { painting.delete(m.id); }
+  }
+
+  async function hydrateAtts(mid, watch) {
+    let { data: aa, error } = await window.db.from('dm_message_attachments')
+      .select('*').eq('message_id', mid).order('position', { ascending: true });
+    if (error) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').eq('message_id', mid));
+    if (aa?.length) { attCache[mid] = aa; paintAtts(mid); }
+    if (!watch) return;
+    [600, 1800, 4000].forEach((d) => setTimeout(async () => {
+      if (!document.querySelector(`.m[data-id="${mid}"]`)) return;
+      const { data: later } = await window.db.from('dm_message_attachments')
+        .select('*').eq('message_id', mid).order('position', { ascending: true });
+      if (later && later.length !== (attCache[mid] || []).length) {
+        attCache[mid] = later; paintAtts(mid);
+      }
+    }, d));
+  }
+
+  const newestTs = () => {
+    const rows = $('msgs')?.querySelectorAll('.m');
+    return rows?.length ? rows[rows.length - 1].dataset.ts : null;
+  };
+
+  let catching = false;
+  async function catchUp() {
+    if (catching || !active || document.hidden) return;
+    catching = true;
+    const cid = active.id, since = newestTs();
+    try {
+      let q = window.db.from('dm_messages')
+        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+        .eq('conversation_id', cid).order('created_at', { ascending: true }).limit(50);
+      if (since) q = q.gt('created_at', since);
+      const { data, error } = await q;
+      if (error || !data?.length) return;
+      for (const m of data) {
+        if (!active || active.id !== cid) return;
+        if (m.profiles) profiles[m.author_id] = m.profiles;
+        if (await appendMessage(m)) await hydrateAtts(m.id, false);
+      }
+    } finally { catching = false; }
+  }
+
+  let rtHealthy = false, pollTimer = null, retryTimer = null, retries = 0;
+
+  function setPolling(on) {
+    if (on && !pollTimer) pollTimer = setInterval(catchUp, 5000);
+    if (!on && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function scheduleRetry(cid) {
+    clearTimeout(retryTimer);
+    const wait = Math.min(30000, 1000 * Math.pow(2, retries++));
+    retryTimer = setTimeout(() => { if (active?.id === cid) listen(cid); }, wait);
+  }
+
   function listen(cid) {
     if (sub) window.db.removeChannel(sub);
+    clearTimeout(retryTimer);
+    rtHealthy = false;
     sub = window.db.channel('dm:' + cid)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, async (p) => {
-        const m = p.new;
-        if (document.querySelector(`.m[data-id="${m.id}"]`)) return;
-        await profileOf(m.author_id);
-        const box = $('msgs');
-        const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
-        const last = box.querySelector('.m:last-of-type');
-        box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
-        wire(box.lastElementChild);
-        let { data: aa } = await window.db.from('dm_message_attachments')
-          .select('*').eq('message_id', m.id).order('position', { ascending: true });
-        if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').eq('message_id', m.id));
-        if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
-        // Re-check briefly: uploads finish after the message row is written.
-        [600, 1800, 4000].forEach((d) => setTimeout(async () => {
-          if (!document.querySelector(`.m[data-id="${m.id}"]`)) return;
-          const { data: later } = await window.db.from('dm_message_attachments')
-            .select('*').eq('message_id', m.id).order('position', { ascending: true });
-          if (later && later.length !== (attCache[m.id] || []).length) {
-            attCache[m.id] = later; paintAtts(m.id);
-          }
-        }, d));
-        if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+        if (await appendMessage(p.new)) await hydrateAtts(p.new.id, true);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dm_messages', filter: `conversation_id=eq.${cid}` }, (p) => {
         const el = document.querySelector(`.m[data-id="${p.new.id}"]`);
@@ -445,8 +502,24 @@
         attCache[mid] = attCache[mid].filter((x) => x.id !== p.old.id);
         paintAtts(mid);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          rtHealthy = true; retries = 0;
+          setPolling(false);
+          catchUp();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          rtHealthy = false;
+          setPolling(true);
+          catchUp();
+          scheduleRetry(cid);
+        }
+      });
+
+    setTimeout(() => { if (!rtHealthy && active?.id === cid) { setPolling(true); catchUp(); } }, 4000);
   }
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+  window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
 
   /* ================== composer ================== */
   function paintTray() {
@@ -483,6 +556,9 @@
       const { data: msg, error } = await window.db.from('dm_messages')
         .insert({ conversation_id: active.id, author_id: me.id, content: v || null }).select().single();
       if (error) return UI.toast(error.message, true);
+
+      // Show our own message immediately rather than waiting for the echo.
+      await appendMessage(msg);
 
       if (files.length) {
         const bar = $('upbar'); bar.classList.remove('hidden');
@@ -726,10 +802,24 @@
     composer(); newModal(); callUI();
 
     // Friend state should update without a refresh, on both sides.
+    // If the socket is unhealthy we fall back to a slow refresh so the
+    // sidebar still catches new conversations and friend requests.
+    let friendPoll = null;
     window.db.channel('dm-friends-' + me.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => loadAll())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dm_participants' }, () => loadAll())
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (friendPoll) { clearInterval(friendPoll); friendPoll = null; }
+          return;
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('NexChat realtime: dm-friends -> ' + status);
+          if (!friendPoll) {
+            friendPoll = setInterval(() => { if (!document.hidden) loadAll(); }, 20000);
+          }
+        }
+      });
 
     await loadAll();
     if (location.hash === '#requests') { tab = 'requests'; syncTabs(); paintList(); }

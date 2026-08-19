@@ -1,6 +1,16 @@
 /* Global realtime notifier: DM messages, friend requests, incoming calls.
    Loaded on every signed-in page so alerts arrive wherever you are. */
 window.Notify = (function () {
+  /* Logs realtime channel health instead of failing silently. */
+  function chanStatus(label) {
+    return (status, err) => {
+      if (status === 'SUBSCRIBED') return;
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn(`NexChat realtime: ${label} -> ${status}`, err || '');
+      }
+    };
+  }
+
   let me = null, convIds = new Set(), chans = [];
   const seen = new Set();
 
@@ -40,7 +50,7 @@ window.Notify = (function () {
           action: () => { window.location.href = `dms.html?c=${m.conversation_id}`; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-dm-notify')));
 
     // --- friend requests and acceptances ---
     chans.push(window.db.channel('nx-friend-notify')
@@ -70,7 +80,7 @@ window.Notify = (function () {
           action: () => { window.location.href = 'dms.html'; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-friend-notify')));
 
     // --- incoming DM calls ---
     chans.push(window.db.channel('nx-call:' + me.id)
@@ -87,7 +97,7 @@ window.Notify = (function () {
           action: () => { window.location.href = `dms.html?c=${payload.conversation}&call=1`; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-call')));
   }
 
   /* Rings a specific person's personal channel. */

@@ -5,6 +5,7 @@
   let channels = [], active = null, sub = null, canManage = false;
   let voiceChan = null, voicePoll = null;
   const profiles = {}, rx = {}, attCache = {};
+  const painting = new Set();   // in-flight appendMessage ids (dedupe guard)
   let pending = [];   // files staged in the composer
 
   const QUICK = ['👍', '🔥', '😂', '❤️', '😮', '🎉'];
@@ -364,34 +365,95 @@
     };
   }
 
+  /* ================= message painting + catch-up =================
+     Rendering a message must never depend on the realtime echo coming back.
+     Everything below (realtime, the catch-up poller, and your own send) funnels
+     through appendMessage, so a message shows up even if the socket is down. */
+
+  async function appendMessage(m) {
+    const box = $('msgs');
+    if (!box || !active) return null;
+    if (m.channel_id && m.channel_id !== active.id) return null;
+    if (document.querySelector(`.m[data-id="${m.id}"]`) || painting.has(m.id)) return null;
+    painting.add(m.id);
+    try {
+    await profileOf(m.author_id);
+    if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+    const last = box.querySelector('.m:last-of-type');
+    box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
+    const el = box.lastElementChild;
+    wire(el);
+    if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+    return el;
+    } finally { painting.delete(m.id); }
+  }
+
+  async function hydrateAtts(mid, watch) {
+    let { data: aa, error } = await window.db.from('message_attachments')
+      .select('*').eq('message_id', mid).order('position', { ascending: true });
+    if (error) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', mid));
+    if (aa?.length) { attCache[mid] = aa; paintAtts(mid); }
+    if (!watch) return;
+    // Re-check briefly: uploads finish after the message row is written.
+    [600, 1800, 4000].forEach((d) => setTimeout(async () => {
+      if (!document.querySelector(`.m[data-id="${mid}"]`)) return;
+      const { data: later } = await window.db.from('message_attachments')
+        .select('*').eq('message_id', mid).order('position', { ascending: true });
+      if (later && later.length !== (attCache[mid] || []).length) {
+        attCache[mid] = later; paintAtts(mid);
+      }
+    }, d));
+  }
+
+  const newestTs = () => {
+    const rows = $('msgs')?.querySelectorAll('.m');
+    return rows?.length ? rows[rows.length - 1].dataset.ts : null;
+  };
+
+  /* Pulls anything posted since the newest row we already show. This is what
+     keeps the channel live when the websocket can't connect. */
+  let catching = false;
+  async function catchUp() {
+    if (catching || !active || document.hidden) return;
+    catching = true;
+    const cid = active.id, since = newestTs();
+    try {
+      let q = window.db.from('messages')
+        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
+        .eq('channel_id', cid).order('created_at', { ascending: true }).limit(50);
+      if (since) q = q.gt('created_at', since);
+      const { data, error } = await q;
+      if (error || !data?.length) return;
+      for (const m of data) {
+        if (!active || active.id !== cid) return;
+        if (m.profiles) profiles[m.author_id] = m.profiles;
+        if (await appendMessage(m)) await hydrateAtts(m.id, false);
+      }
+    } finally { catching = false; }
+  }
+
   /* ================= realtime ================= */
+  let rtHealthy = false, pollTimer = null, retryTimer = null, retries = 0;
+
+  function setPolling(on) {
+    if (on && !pollTimer) pollTimer = setInterval(catchUp, 5000);
+    if (!on && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function scheduleRetry(cid) {
+    clearTimeout(retryTimer);
+    const wait = Math.min(30000, 1000 * Math.pow(2, retries++));
+    retryTimer = setTimeout(() => { if (active?.id === cid) listen(cid); }, wait);
+  }
+
   function listen(cid) {
     if (sub) window.db.removeChannel(sub);
+    clearTimeout(retryTimer);
+    rtHealthy = false;
     sub = window.db.channel('ch:' + cid)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, async (p) => {
-        const m = p.new;
-        if (document.querySelector(`.m[data-id="${m.id}"]`)) return;
-        await profileOf(m.author_id);
-        const box = $('msgs');
-        const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
-        const last = box.querySelector('.m:last-of-type');
-        box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
-        const el = box.lastElementChild;
-        wire(el);
-        let { data: aa } = await window.db.from('message_attachments')
-          .select('*').eq('message_id', m.id).order('position', { ascending: true });
-        if (!aa) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', m.id));
-        if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
-        // Re-check briefly: uploads finish after the message row is written.
-        [600, 1800, 4000].forEach((d) => setTimeout(async () => {
-          if (!document.querySelector(`.m[data-id="${m.id}"]`)) return;
-          const { data: later } = await window.db.from('message_attachments')
-            .select('*').eq('message_id', m.id).order('position', { ascending: true });
-          if (later && later.length !== (attCache[m.id] || []).length) {
-            attCache[m.id] = later; paintAtts(m.id);
-          }
-        }, d));
-        if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+        if (await appendMessage(p.new)) await hydrateAtts(p.new.id, true);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
         const m = p.new;
@@ -435,8 +497,30 @@
         attCache[mid] = attCache[mid].filter((x) => x.id !== p.old.id);
         paintAtts(mid);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Socket is live. Poll slowly as a safety net and reconcile once now,
+          // since anything posted while we were connecting was missed.
+          rtHealthy = true; retries = 0;
+          setPolling(false);
+          catchUp();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Realtime is unavailable (bad socket, RLS on the publication, project
+          // paused, blocked WS). Keep the chat working by polling instead.
+          rtHealthy = false;
+          setPolling(true);
+          catchUp();
+          scheduleRetry(cid);
+        }
+      });
+
+    // If the socket never reports SUBSCRIBED at all, start polling anyway.
+    setTimeout(() => { if (!rtHealthy && active?.id === cid) { setPolling(true); catchUp(); } }, 4000);
   }
+
+  // Coming back to the tab should immediately reconcile, not wait for a tick.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+  window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
 
   /* ================= composer + uploads ================= */
   function paintTray() {
@@ -481,6 +565,10 @@
       const { data: msg, error } = await window.db.from('messages')
         .insert({ channel_id: active.id, author_id: me.id, content: v || null }).select().single();
       if (error) { UI.toast(error.message, true); return; }
+
+      // Paint our own message right away. Waiting on the realtime echo meant
+      // that whenever the socket was down you couldn't even see what you sent.
+      await appendMessage(msg);
 
       if (files.length) {
         const bar = $('upbar'); bar.classList.remove('hidden');
