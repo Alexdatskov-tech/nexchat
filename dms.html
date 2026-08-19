@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Messages</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=18" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=19" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=18" />
+<link rel="stylesheet" href="assets/css/theme.css?v=19" />
 </head>
 <body>
 <div class="shell" id="shell">
@@ -18,8 +18,8 @@
     </div>
 
     <div class="dm-tabs">
-      <button class="on" data-tab="chats">Chats</button>
-      <button data-tab="friends">Friends</button>
+      <button class="on" data-tab="friends">Friends</button>
+      <button data-tab="groups" id="tabGroups" class="hidden">Groups</button>
       <button data-tab="requests">Requests <span class="pill hidden" id="reqPill">0</span></button>
     </div>
     <div class="dm-search"><input id="dmFilter" class="input" placeholder="Search" /></div>
@@ -41,8 +41,27 @@
       <b id="convName">Select a conversation</b>
       <span class="topic hidden" id="convSub"></span>
       <span style="flex:1"></span>
+      <button class="btn btn-quiet btn-icon hidden" id="btnCall" title="Start a call"><i class="fa-solid fa-phone"></i></button>
+      <button class="btn btn-quiet btn-icon hidden" id="btnVideoCall" title="Start a video call"><i class="fa-solid fa-video"></i></button>
       <button class="btn btn-quiet btn-icon hidden" id="btnConvInfo" title="Details"><i class="fa-solid fa-circle-info"></i></button>
     </header>
+
+    <div class="vroom hidden" id="vroom">
+      <div class="vroom-head">
+        <span class="vr-ico"><i class="fa-solid fa-phone"></i></span>
+        <div class="vr-t"><b id="vrName">Call</b><small id="vrSub"></small></div>
+        <div class="vr-right"><button class="btn btn-ghost btn-sm" id="vrChat"><i class="fa-solid fa-comment"></i> Chat</button></div>
+      </div>
+      <div class="vroom-stage" id="vrStage"></div>
+      <div class="vstats hidden" id="vstats"></div>
+      <div class="vroom-bar">
+        <button class="vbtn" id="vrMute" title="Mute"><i class="fa-solid fa-microphone"></i></button>
+        <button class="vbtn" id="vrDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
+        <button class="vbtn" id="vrCam" title="Camera"><i class="fa-solid fa-video"></i></button>
+        <button class="vbtn" id="vrShare" title="Share screen"><i class="fa-solid fa-display"></i></button>
+        <button class="vbtn hang" id="vrLeave" title="Hang up"><i class="fa-solid fa-phone-slash"></i></button>
+      </div>
+    </div>
 
     <div class="msgs" id="msgs"></div>
 
@@ -55,9 +74,6 @@
         <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up"></i></button>
       </div>
       <input type="file" id="fileIn" multiple class="hidden" />
-      <div class="composer-hint">
-        <span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> newline</span>
-      </div>
     </div>
   </main>
 </div>
@@ -90,12 +106,15 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=18"></script>
-<script src="assets/js/supabase-client.js?v=18"></script>
-<script src="assets/js/ui.js?v=18"></script>
-<script src="assets/js/md.js?v=18"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=18"></script>
-<script src="assets/js/viewer.js?v=18"></script>
-<script src="assets/js/dms.js?v=18"></script>
+<script src="assets/js/config.js?v=19"></script>
+<script src="assets/js/supabase-client.js?v=19"></script>
+<script src="assets/js/ui.js?v=19"></script>
+<script src="assets/js/md.js?v=19"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=19"></script>
+<script src="assets/js/viewer.js?v=19"></script>
+<script src="assets/js/ice.js?v=19"></script>
+<script src="assets/js/voice.js?v=19"></script>
+<script src="assets/js/notify.js?v=19"></script>
+<script src="assets/js/dms.js?v=19"></script>
 </body>
 </html>

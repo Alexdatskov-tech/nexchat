@@ -1,7 +1,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const S3 = () => window.__nx_tp;
-  let me = null, tab = 'chats', convs = [], friends = [], requests = [];
+  let me = null, tab = 'friends', convs = [], friends = [], requests = [], outgoing = [];
   let active = null, sub = null, pending = [];
   const profiles = {}, attCache = {};
 
@@ -14,13 +14,11 @@
   }
 
   /* ================== sidebar ================== */
+  function syncTabs() {
+    document.querySelectorAll('.dm-tabs button').forEach((x) => x.classList.toggle('on', x.dataset.tab === tab));
+  }
   document.querySelectorAll('.dm-tabs button').forEach((b) => {
-    b.onclick = () => {
-      document.querySelectorAll('.dm-tabs button').forEach((x) => x.classList.remove('on'));
-      b.classList.add('on');
-      tab = b.dataset.tab;
-      paintList();
-    };
+    b.onclick = () => { tab = b.dataset.tab; syncTabs(); paintList(); };
   });
   $('dmFilter').oninput = paintList;
 
@@ -47,7 +45,9 @@
     const accepted = (fr || []).filter((f) => f.status === 'accepted');
     const friendIds = [...new Set(accepted.map((f) => (f.user_id === me.id ? f.friend_id : f.user_id)))];
     requests = (fr || []).filter((f) => f.status === 'pending' && f.friend_id === me.id);
-    const reqIds = requests.map((r) => r.user_id);
+    // Requests you sent belong in your own Requests tab too, marked pending.
+    outgoing = (fr || []).filter((f) => f.status === 'pending' && f.user_id === me.id);
+    const reqIds = [...requests.map((r) => r.user_id), ...outgoing.map((r) => r.friend_id)];
 
     const need = [...new Set([...friendIds, ...reqIds])].filter((i) => !profiles[i]);
     if (need.length) {
@@ -59,7 +59,14 @@
 
     $('reqPill').textContent = requests.length;
     $('reqPill').classList.toggle('hidden', !requests.length);
-    $('dmSub').textContent = `${convs.length} chat${convs.length === 1 ? '' : 's'} · ${friends.length} friend${friends.length === 1 ? '' : 's'}`;
+
+    // Groups tab only exists once there's a group to show.
+    const groups = convs.filter((c) => c.is_group);
+    $('tabGroups').classList.toggle('hidden', !groups.length);
+    if (tab === 'groups' && !groups.length) { tab = 'friends'; syncTabs(); }
+
+    $('dmSub').textContent = `${friends.length} friend${friends.length === 1 ? '' : 's'}`
+      + (groups.length ? ` · ${groups.length} group${groups.length === 1 ? '' : 's'}` : '');
     paintList();
   }
 
@@ -79,15 +86,15 @@
     const q = $('dmFilter').value.trim().toLowerCase();
     const box = $('dmList');
 
-    if (tab === 'chats') {
-      const rows = convs.filter((c) => !q || convTitle(c).toLowerCase().includes(q));
+    if (tab === 'groups') {
+      const rows = convs.filter((c) => c.is_group && (!q || convTitle(c).toLowerCase().includes(q)));
       box.innerHTML = rows.length ? rows.map((c) => `
         <div class="dm-item ${active?.id === c.id ? 'on' : ''}" data-c="${c.id}">
           ${convAvatar(c, 34)}
           <div class="nm"><b>${MD.esc(convTitle(c))}</b>
             <small>${c.is_group ? `${c.people.length + 1} members` : '@' + MD.esc(c.people[0]?.username || '')}</small></div>
         </div>`).join('')
-        : '<div class="dm-empty">No conversations yet. Add a friend to get started.</div>';
+        : '<div class="dm-empty">No group chats yet.</div>';
       box.querySelectorAll('.dm-item').forEach((el) => {
         el.onclick = () => openConv(convs.find((c) => c.id === el.dataset.c));
       });
@@ -99,16 +106,27 @@
         <div class="dm-item" data-u="${f.id}">
           ${UI.avatar(f, 34)}
           <div class="nm"><b>${MD.esc(f.display_name || f.username)}</b><small>@${MD.esc(f.username)}</small></div>
-          <button class="btn btn-quiet btn-sm" data-msg="${f.id}"><i class="fa-solid fa-paper-plane"></i></button>
+          <button class="btn btn-quiet btn-sm" data-call="${f.id}" title="Call"><i class="fa-solid fa-phone"></i></button>
+          <button class="btn btn-quiet btn-sm" data-msg="${f.id}" title="Message"><i class="fa-solid fa-paper-plane"></i></button>
         </div>`).join('')
-        : '<div class="dm-empty">No friends yet.</div>';
+        : '<div class="dm-empty">No friends yet. Use the pencil above to add someone.</div>';
+
+      const openWith = async (uid) => {
+        const { data, error } = await window.db.rpc('open_dm', { p_other: uid });
+        if (error) { UI.toast(error.message, true); return null; }
+        await loadAll();
+        const c = convs.find((x) => x.id === data);
+        openConv(c);
+        return c;
+      };
       box.querySelectorAll('[data-msg]').forEach((b) => {
+        b.onclick = async (e) => { e.stopPropagation(); await openWith(b.dataset.msg); };
+      });
+      box.querySelectorAll('[data-call]').forEach((b) => {
         b.onclick = async (e) => {
           e.stopPropagation();
-          const { data, error } = await window.db.rpc('open_dm', { p_other: b.dataset.msg });
-          if (error) return UI.toast(error.message, true);
-          await loadAll();
-          openConv(convs.find((c) => c.id === data));
+          const c = await openWith(b.dataset.call);
+          if (c) startCall(false);
         };
       });
       box.querySelectorAll('.dm-item').forEach((el) => {
@@ -117,15 +135,38 @@
     }
 
     else {
-      box.innerHTML = requests.length ? requests.map((r) => {
-        const p = profiles[r.user_id] || { username: '…' };
-        return `<div class="dm-item" data-u="${r.user_id}">
-          ${UI.avatar(p, 34)}
-          <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>wants to be friends</small></div>
-          <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
-          <button class="btn btn-quiet btn-sm" data-no="${r.user_id}"><i class="fa-solid fa-xmark"></i></button>
-        </div>`;
-      }).join('') : '<div class="dm-empty">No pending requests.</div>';
+      let html = '';
+      if (requests.length) {
+        html += '<div class="dm-sect">Incoming</div>' + requests.map((r) => {
+          const p = profiles[r.user_id] || { username: '…' };
+          return `<div class="dm-item" data-u="${r.user_id}">
+            ${UI.avatar(p, 34)}
+            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>wants to be friends</small></div>
+            <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
+            <button class="btn btn-quiet btn-sm" data-no="${r.user_id}"><i class="fa-solid fa-xmark"></i></button>
+          </div>`;
+        }).join('');
+      }
+      if (outgoing.length) {
+        html += '<div class="dm-sect">Sent</div>' + outgoing.map((r) => {
+          const p = profiles[r.friend_id] || { username: '…' };
+          return `<div class="dm-item" data-u="${r.friend_id}">
+            ${UI.avatar(p, 34)}
+            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Pending</small></div>
+            <span class="chip" style="color:var(--txt-3)"><i class="fa-regular fa-clock"></i> Waiting</span>
+            <button class="btn btn-quiet btn-sm" data-cancel="${r.friend_id}" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+          </div>`;
+        }).join('');
+      }
+      box.innerHTML = html || '<div class="dm-empty">No pending requests.</div>';
+      box.querySelectorAll('[data-cancel]').forEach((b) => {
+        b.onclick = async (e) => {
+          e.stopPropagation();
+          const { error } = await window.db.rpc('remove_friend', { p_other: b.dataset.cancel });
+          UI.toast(error ? error.message : 'Request cancelled.', !!error);
+          loadAll();
+        };
+      });
       box.querySelectorAll('[data-ok]').forEach((b) => {
         b.onclick = async (e) => {
           e.stopPropagation();
@@ -155,6 +196,9 @@
     $('convSub').textContent = c.is_group ? `${c.people.length + 1} members` : '@' + (c.people[0]?.username || '');
     $('convSub').classList.remove('hidden');
     $('btnConvInfo').classList.remove('hidden');
+    $('btnCall').classList.remove('hidden');
+    $('btnVideoCall').classList.remove('hidden');
+    if (inCall) showCall(false);
     $('input').placeholder = `Message ${convTitle(c)}`;
     $('composer').classList.remove('hidden');
     $('rail').classList.remove('open');
@@ -238,7 +282,13 @@
     const host = document.querySelector(`[data-atts="${mid}"]`);
     if (!host) return;
     host.innerHTML = '';
-    (attCache[mid] || []).forEach((a) => host.appendChild(Viewer.render(a)));
+    const msgAuthor = document.querySelector(`.m[data-id="${mid}"]`)?.dataset.au;
+    const canRemove = msgAuthor === me.id;
+    (attCache[mid] || []).forEach((a) => {
+      host.appendChild(Viewer.renderWithControls({ ...a, _dm: true }, canRemove, () => {
+        attCache[mid] = (attCache[mid] || []).filter((x) => x.id !== a.id);
+      }));
+    });
   }
 
   async function loadMsgs(cid) {
@@ -468,7 +518,9 @@
       if (error) return ($('newErr').textContent = error.message);
       $('addUser').value = '';
       UI.toast('Friend request sent.');
-      loadAll();
+      m.classList.add('hidden');
+      tab = 'requests'; syncTabs();
+      await loadAll();
     };
     $('groupGo').onclick = async () => {
       const picks = [...$('friendPicks').querySelectorAll('input:checked')].map((c) => c.value);
@@ -483,6 +535,137 @@
     };
   }
 
+  /* ================== calls ================== */
+  let inCall = false, speakSet = new Set(), devStats = false;
+
+  function showCall(on) {
+    inCall = on;
+    $('vroom').classList.toggle('hidden', !on);
+    $('msgs').classList.toggle('hidden', on);
+    $('composer').classList.toggle('hidden', on || !active);
+    if (on) paintRoom(Voice.state());
+  }
+
+  function feedsFor(p) {
+    const isMe = p.id === me.id;
+    const st = Voice.state();
+    const wantsCam = isMe ? st.cam : !!p.cam;
+    const wantsScreen = isMe ? st.sharing : !!p.sharing;
+    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live');
+    const camS = wantsCam ? (isMe ? Voice.localCam() : Voice.peerCam(p.id)) : null;
+    const scrS = wantsScreen ? (isMe ? Voice.localScreen() : Voice.peerScreen(p.id)) : null;
+    const out = [];
+    if (wantsScreen && hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
+    if (wantsCam && hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
+    if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
+    return out;
+  }
+
+  function paintRoom(st) {
+    if (!st.active) return;
+    $('vrName').textContent = active ? convTitle(active) : 'Call';
+    $('vrSub').textContent = `${st.members.size} on the call`;
+    const set = (id, cls, cond, icon) => {
+      const b = $(id); b.classList.remove('live', 'off');
+      if (cond) b.classList.add(cls);
+      if (icon) b.innerHTML = icon;
+    };
+    set('vrMute', 'off', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
+    set('vrDeaf', 'off', st.deaf, '<i class="fa-solid fa-headphones-simple"></i>');
+    set('vrCam', 'live', st.cam);
+    set('vrShare', 'live', st.sharing);
+
+    const grid = $('vrStage');
+    const feeds = [...st.members.values()].flatMap(feedsFor);
+    grid.classList.toggle('solo', feeds.length === 1);
+    const seenKeys = new Set();
+    feeds.forEach((f) => {
+      seenKeys.add(f.key);
+      let t = grid.querySelector(`[data-t="${f.key}"]`);
+      if (!t) {
+        t = document.createElement('div');
+        t.className = 'vtile';
+        t.dataset.t = f.key;
+        t.innerHTML = `<video autoplay playsinline ${f.isMe ? 'muted' : ''}></video><div class="vt-av"></div><div class="vt-name"></div>`;
+        grid.appendChild(t);
+      }
+      const v = t.querySelector('video');
+      if (f.stream && v.srcObject !== f.stream) { v.srcObject = f.stream; v.play?.().catch(() => {}); }
+      if (!f.stream) v.srcObject = null;
+      v.style.display = f.stream ? '' : 'none';
+      const av = t.querySelector('.vt-av');
+      av.style.display = f.stream ? 'none' : '';
+      if (!f.stream) av.innerHTML = UI.avatar(f.p, 76, { halo: false });
+      t.querySelector('.vt-name').innerHTML =
+        `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(f.p.display_name || f.p.username)}${f.isMe ? ' (you)' : ''}</span>`;
+      t.querySelector('.vt-flag')?.remove();
+      if (f.screen) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
+      t.classList.toggle('speaking', speakSet.has(f.p.id) && !f.p.muted);
+    });
+    [...grid.children].forEach((t) => { if (!seenKeys.has(t.dataset.t)) t.remove(); });
+  }
+
+  function paintStats(st) {
+    const bar = $('vstats');
+    if (!inCall || !devStats) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    const rttCls = st.rtt === 0 ? '' : st.rtt < 60 ? 'good' : st.rtt < 160 ? 'warn' : 'bad';
+    bar.innerHTML = `
+      <span class="st ${st.res ? 'good' : ''}"><i class="fa-solid fa-display"></i> Video <b>${st.res || 'off'}</b></span>
+      <span class="st"><i class="fa-solid fa-film"></i> <b>${st.fps || 0}</b> fps</span>
+      <span class="st"><i class="fa-solid fa-video"></i> <b>${st.vkbps || 0}</b> kbps</span>
+      <span class="st good"><i class="fa-solid fa-waveform-lines"></i> Audio <b>${st.akbps || 0}</b> kbps</span>
+      <span class="spacer"></span>
+      <span class="st ${rttCls}"><i class="fa-solid fa-tower-broadcast"></i> <b>${st.rtt || 0}</b> ms</span>`;
+  }
+
+  function onSpeaking(set) {
+    speakSet = set;
+    document.querySelectorAll('.vtile').forEach((t) => {
+      const uid = t.dataset.t.split(':')[0];
+      const p = Voice.state().members.get(uid);
+      t.classList.toggle('speaking', set.has(uid) && !p?.muted);
+    });
+  }
+
+  async function startCall(withVideo) {
+    if (!active) return;
+    try {
+      // A DM call is just a voice room keyed on the conversation id.
+      await Voice.join({ id: 'dm-' + active.id, name: convTitle(active) }, null,
+        { ...me, muted: false, deaf: false, cam: false, sharing: false },
+        paintRoom, onSpeaking, paintStats);
+    } catch { return; }
+    showCall(true);
+    if (withVideo) await Voice.toggleCam();
+
+    // Ring everyone else in the conversation.
+    active.people.forEach((p) => {
+      window.Notify?.ring(p.id, {
+        conversation: active.id,
+        name: me.display_name || me.username,
+        avatar: UI.avatar(me, 32, { halo: false }),
+      });
+    });
+    UI.toast('Calling…');
+  }
+
+  function callUI() {
+    $('btnCall').onclick = () => startCall(false);
+    $('btnVideoCall').onclick = () => startCall(true);
+    $('vrMute').onclick = () => Voice.setMute();
+    $('vrDeaf').onclick = () => Voice.setDeaf();
+    $('vrCam').onclick = () => Voice.toggleCam();
+    $('vrShare').onclick = () => {
+      if (Voice.state().sharing) return Voice.stopShare();
+      if (!Voice.screenSupported()) return UI.toast('Screen sharing needs a desktop browser.', true);
+      Voice.startShare({ surface: 'monitor', quality: '1080', audio: true });
+    };
+    $('vrChat').onclick = () => showCall(false);
+    $('vrLeave').onclick = async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); };
+    window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });
+  }
+
   $('burger').onclick = () => {
     $('rail').classList.add('open');
     const s = document.createElement('div');
@@ -495,13 +678,27 @@
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
+    if (me) window.Notify?.start(me);
     profiles[me.id] = me;
     $('meAv').innerHTML = UI.avatar(me, 28);
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
-    composer(); newModal();
+    composer(); newModal(); callUI();
+
+    // Friend state should update without a refresh, on both sides.
+    window.db.channel('dm-friends-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dm_participants' }, () => loadAll())
+      .subscribe();
+
     await loadAll();
-    const want = new URLSearchParams(location.search).get('c');
-    if (want) openConv(convs.find((c) => c.id === want));
+    if (location.hash === '#requests') { tab = 'requests'; syncTabs(); paintList(); }
+    devStats = !!(me.theme && me.theme.dev_mode);
+    const params = new URLSearchParams(location.search);
+    const want = params.get('c');
+    if (want) {
+      await openConv(convs.find((c) => c.id === want));
+      if (params.get('call') === '1') startCall(false);
+    }
   })();
 })();

@@ -140,9 +140,14 @@
   function paintAtts(mid) {
     const host = document.querySelector(`[data-atts="${mid}"]`);
     if (!host) return;
-    const list = attCache[mid] || [];
     host.innerHTML = '';
-    list.forEach((a) => host.appendChild(Viewer.render(a)));
+    const msgAuthor = document.querySelector(`.m[data-id="${mid}"]`)?.dataset.au;
+    const canRemove = msgAuthor === me.id || canManage;
+    (attCache[mid] || []).forEach((a) => {
+      host.appendChild(Viewer.renderWithControls({ ...a, _dm: false }, canRemove, () => {
+        attCache[mid] = (attCache[mid] || []).filter((x) => x.id !== a.id);
+      }));
+    });
   }
 
   const grouped = (pa, pt, m) => pa === m.author_id && (new Date(m.created_at) - new Date(pt)) < 5 * 60 * 1000;
@@ -284,7 +289,12 @@
                        : 'This removes it for everyone.';
         if (!await UI.confirmDialog('Delete message', body, true)) return;
         const { error } = await window.db.from('messages').delete().eq('id', id);
-        if (error) return UI.toast(error.message, true);
+        if (error) {
+          UI.toast(/policy|permission|row-level/i.test(error.message)
+            ? 'You don\u2019t have permission to delete that message.'
+            : error.message, true);
+          return;
+        }
         purgeAttachments(id);
         document.querySelector(`.m[data-id="${id}"]`)?.remove();
         regroup();
@@ -852,6 +862,7 @@
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
 
+window.Notify?.start(me);
     devStats = !!(me.theme && me.theme.dev_mode);
 
     canManage = srv.owner_id === me.id || me.is_platform_admin;

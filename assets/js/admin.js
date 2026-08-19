@@ -108,6 +108,7 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me?.is_platform_admin) { $('denied').classList.remove('hidden'); return; }
+window.Notify?.start(me);
     $('wrap').classList.remove('hidden');
     loadRequests();
   })();

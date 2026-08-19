@@ -145,6 +145,7 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) { UI.toast('Profile missing — try signing out and back in.', true); return; }
+window.Notify?.start(me);
     applyDashboardBg(me.theme);
     $('meAv').innerHTML = UI.avatar(me, 24);
     $('meName').textContent = me.display_name || me.username;

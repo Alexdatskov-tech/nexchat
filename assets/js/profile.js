@@ -334,6 +334,7 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) return UI.toast('Could not load your profile.', true);
+window.Notify?.start(me);
     $('acUser').textContent = '@' + me.username;
     $('acSince').textContent = new Date(me.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
     hydrate();

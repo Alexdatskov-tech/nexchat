@@ -86,6 +86,44 @@ window.UI = (function () {
     return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${t}`;
   }
 
+  /* Dynamic-island style pill: slides down, sits for ~1.8s, slides away.
+     Clicking it runs the supplied action. Stacks if several arrive at once. */
+  function island(opts) {
+    let host = document.getElementById('islandHost');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'islandHost';
+      host.className = 'island-host';
+      document.body.appendChild(host);
+    }
+    const el = document.createElement('div');
+    el.className = 'island' + (opts.accent ? ' accent' : '');
+    el.innerHTML = `
+      <div class="isl-ico">${opts.avatar || `<i class="fa-solid ${opts.icon || 'fa-bell'}"></i>`}</div>
+      <div class="isl-txt"><b>${esc(opts.title || '')}</b>${opts.body ? `<small>${esc(opts.body)}</small>` : ''}</div>
+      ${opts.action ? '<i class="fa-solid fa-chevron-right isl-go"></i>' : ''}`;
+    host.appendChild(el);
+
+    requestAnimationFrame(() => el.classList.add('in'));
+    let gone = false;
+    const dismiss = () => {
+      if (gone) return;
+      gone = true;
+      el.classList.remove('in');
+      setTimeout(() => el.remove(), 260);
+    };
+    const timer = setTimeout(dismiss, opts.duration || 1800);
+
+    if (opts.action) {
+      el.style.cursor = 'pointer';
+      el.onclick = () => { clearTimeout(timer); dismiss(); opts.action(); };
+    }
+    // Hovering holds it open so it can actually be clicked.
+    el.onmouseenter = () => clearTimeout(timer);
+    el.onmouseleave = () => setTimeout(dismiss, 700);
+    return dismiss;
+  }
+
   /* Clickable user card: bio, badges, roles, and quick actions. */
   async function userCard(userId, opts = {}) {
     const { data: p } = await window.db.from('profiles').select('*').eq('id', userId).single();
@@ -187,5 +225,5 @@ window.UI = (function () {
     return `<span class="role-emoji">${esc(v)}</span>`;
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon };
+  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island };
 })();

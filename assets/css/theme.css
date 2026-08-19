@@ -1043,3 +1043,46 @@ body.has-bg::before { filter: brightness(var(--dash-bright, 1)); }
   transition: background var(--t-fast), color var(--t-fast);
 }
 .seg-pick button.on { background: var(--bg-3); color: var(--txt-1); }
+
+/* ============================================================================
+   DYNAMIC ISLAND NOTIFICATIONS
+   ============================================================================ */
+.island-host {
+  position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 0; right: 0; z-index: 700;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.island {
+  pointer-events: auto; display: flex; align-items: center; gap: 11px;
+  max-width: min(380px, calc(100vw - 28px));
+  padding: 9px 16px 9px 9px; border-radius: 999px;
+  background: rgba(18,17,22,.9); border: 1px solid rgba(255,255,255,.11);
+  backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 14px 40px -10px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.06);
+  transform: translateY(-140%) scale(.9); opacity: 0;
+  transition: transform .34s var(--spring), opacity .22s var(--ease);
+}
+.island.in { transform: translateY(0) scale(1); opacity: 1; }
+.island.accent { border-color: rgba(47,191,135,.4); }
+.isl-ico { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  display: grid; place-items: center; background: var(--bg-3); color: var(--accent); font-size: 13px; }
+.isl-ico .av { width: 32px; height: 32px; font-size: 13px; }
+.isl-txt { min-width: 0; }
+.isl-txt b { display: block; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isl-txt small { display: block; font-size: 11.5px; color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isl-go { color: var(--txt-3); font-size: 10px; margin-left: 2px; }
+
+/* attachment remove control */
+.att-wrap { position: relative; display: inline-block; max-width: 100%; }
+.att-x {
+  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(10,10,12,.78); border: 1px solid var(--line-2); color: var(--txt-2);
+  cursor: pointer; display: grid; place-items: center; font-size: 11px;
+  opacity: 0; transition: opacity var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.att-wrap:hover .att-x { opacity: 1; }
+.att-x:hover { color: #FF8085; background: rgba(229,72,77,.2); }
+@media (hover: none) { .att-x { opacity: 1; } }
+
+/* request list section headings */
+.dm-sect { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+           color: var(--txt-3); padding: 12px 9px 5px; }

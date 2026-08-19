@@ -366,10 +366,13 @@ window.Voice = (function () {
     members.set(me.id, selfProfile());
     meter(me.id, local);
 
-    await window.db.from('voice_sessions').upsert({
-      channel_id: channel.id, user_id: me.id, server_id: serverId,
-      is_muted: muted, is_deafened: deaf, is_camera_on: cam, is_screen_sharing: sharing,
-    });
+    // DM calls aren't tied to a server, so there's no presence row to write.
+    if (serverId) {
+      await window.db.from('voice_sessions').upsert({
+        channel_id: channel.id, user_id: me.id, server_id: serverId,
+        is_muted: muted, is_deafened: deaf, is_camera_on: cam, is_screen_sharing: sharing,
+      });
+    }
 
     sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false } } });
 
@@ -486,7 +489,7 @@ window.Voice = (function () {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (statTimer) { clearInterval(statTimer); statTimer = null; }
     if (sig) { await window.db.removeChannel(sig); sig = null; }
-    try { await window.db.from('voice_sessions').delete().eq('channel_id', chan.id).eq('user_id', me.id); } catch {}
+    if (srvId) { try { await window.db.from('voice_sessions').delete().eq('channel_id', chan.id).eq('user_id', me.id); } catch {} }
     if (local) { local.getTracks().forEach((t) => t.stop()); local = null; }
     if (screen) { screen.getTracks().forEach((t) => t.stop()); screen = null; }
     if (camTrack) { camTrack.stop(); camTrack = null; }
@@ -497,7 +500,7 @@ window.Voice = (function () {
 
   async function pushFlags() {
     members.set(me.id, selfProfile());
-    if (chan) {
+    if (chan && srvId) {
       window.db.from('voice_sessions')
         .update({ is_muted: muted, is_deafened: deaf, is_camera_on: cam, is_screen_sharing: sharing })
         .eq('channel_id', chan.id).eq('user_id', me.id).then(() => {});

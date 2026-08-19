@@ -343,8 +343,19 @@ window.Viewer = (function () {
     });
   }
 
+  /* Deletes one attachment: removes the object from storage, then the row. */
+  async function removeAttachment(att) {
+    try {
+      const key = decodeURIComponent(new URL(att.url).pathname.replace(/^\/[^/]+\//, ''));
+      if (key) await window.__nx_tp.del(key);
+    } catch {}
+    const table = att._dm ? 'dm_message_attachments' : 'message_attachments';
+    const { error } = await window.db.from(table).delete().eq('id', att.id);
+    if (error) throw new Error(error.message);
+  }
+
   /* Renders one attachment into a DOM node. */
-  function render(att) {
+  function render(att, opts = {}) {
     const kind = kindOf(att.file_name);
     if (kind === 'image') {
       const w = document.createElement('div');
@@ -366,5 +377,27 @@ window.Viewer = (function () {
     return f;
   }
 
-  return { render, kindOf, human, lightbox };
+  /* Wraps a rendered attachment with a remove control when allowed. */
+  function renderWithControls(att, canRemove, onRemoved) {
+    const node = render(att);
+    if (!canRemove) return node;
+    const wrap = document.createElement('div');
+    wrap.className = 'att-wrap';
+    wrap.appendChild(node);
+    const x = document.createElement('button');
+    x.className = 'att-x';
+    x.title = 'Delete this file';
+    x.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    x.onclick = async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!await UI.confirmDialog('Delete file', `"${att.file_name}" will be removed from the message and from storage.`, true)) return;
+      x.disabled = true;
+      try { await removeAttachment(att); wrap.remove(); onRemoved?.(att); UI.toast('File deleted.'); }
+      catch (err) { UI.toast(err.message, true); x.disabled = false; }
+    };
+    wrap.appendChild(x);
+    return wrap;
+  }
+
+  return { render, renderWithControls, removeAttachment, kindOf, human, lightbox };
 })();
