@@ -508,11 +508,13 @@
 
   /* ================= voice ================= */
   let vrOpen = false, speakSet = new Set();
+  // Connection readouts are a developer-mode feature, off for everyone else.
+  let devStats = false;
 
   function showVoiceRoom(on) {
     vrOpen = on;
     $('vroom').classList.toggle('hidden', !on);
-    $('vstats').classList.toggle('hidden', !on);
+    $('vstats').classList.toggle('hidden', !on || !devStats);
     $('msgs').classList.toggle('hidden', on);
     $('chatHead').classList.toggle('hidden', on);
     $('composer').classList.toggle('hidden', on || !active);
@@ -561,8 +563,6 @@
     set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple${st.deaf ? '' : ''}"></i>`);
     set('vrCam', 'live', st.cam);
     set('vrShare', 'live', st.sharing);
-    const fpsBtn = $('vrFps');
-    if (fpsBtn) fpsBtn.textContent = Voice.targetFps + 'fps';
     $('vcMute').classList.toggle('on', st.muted);
     $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
     $('vcDeaf').classList.toggle('on', st.deaf);
@@ -604,7 +604,8 @@
 
   function paintStats(st) {
     const bar = $('vstats');
-    if (!vrOpen) return;
+    if (!vrOpen || !devStats) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
     const rttCls = st.rtt === 0 ? '' : st.rtt < 60 ? 'good' : st.rtt < 160 ? 'warn' : 'bad';
     bar.innerHTML = `
       <span class="st ${st.res ? 'good' : ''}"><i class="fa-solid fa-display"></i> Video <b>${st.res || 'off'}</b></span>
@@ -661,18 +662,53 @@
     } catch { /* mic denied — Voice already surfaced the reason */ }
   }
 
+  /* Asks what to share before handing off to the browser's own picker. */
+  function openSharePicker() {
+    if (Voice.state().sharing) { Voice.stopShare(); UI.toast('Stopped sharing.'); return; }
+    if (!Voice.screenSupported()) {
+      UI.toast('Screen sharing needs a desktop browser — this device doesn\u2019t support it.', true);
+      return;
+    }
+    const m = $('mShare');
+    $('shareErr').textContent = '';
+    m.classList.remove('hidden');
+  }
+
+  function shareModal() {
+    const m = $('mShare');
+    m.querySelectorAll('[data-close]').forEach((b) => { b.onclick = () => m.classList.add('hidden'); });
+    m.onclick = (e) => { if (e.target === m) m.classList.add('hidden'); };
+
+    $('shareOpts').querySelectorAll('.share-opt').forEach((b) => {
+      b.onclick = () => {
+        $('shareOpts').querySelectorAll('.share-opt').forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+      };
+    });
+    $('shareQ').querySelectorAll('button').forEach((b) => {
+      b.onclick = () => {
+        $('shareQ').querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+      };
+    });
+
+    $('shareGo').onclick = async () => {
+      const surface = $('shareOpts').querySelector('.share-opt.on')?.dataset.s || 'monitor';
+      const quality = $('shareQ').querySelector('button.on')?.dataset.q || '1080';
+      const audio = $('shareAudio').checked;
+      m.classList.add('hidden');
+      await Voice.startShare({ surface, quality, audio });
+      if (Voice.state().sharing) UI.toast('You\u2019re sharing your screen.');
+    };
+  }
+
   function voiceButtons() {
+    shareModal();
     $('vrMute').onclick = () => Voice.setMute();
     $('vrDeaf').onclick = () => Voice.setDeaf();
     $('vrCam').onclick = () => Voice.toggleCam();
-    $('vrShare').onclick = () => Voice.toggleShare();
+    $('vrShare').onclick = () => openSharePicker();
     $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
-    $('vrFps').onclick = async () => {
-      const next = Voice.targetFps === 60 ? 30 : 60;
-      await Voice.setTargetFps(next);
-      $('vrFps').textContent = next + 'fps';
-      UI.toast(`Targeting ${next} fps.`);
-    };
     $('vrChat').onclick = () => showVoiceRoom(false);
     $('vcDock').addEventListener('click', (e) => {
       // Tapping the dock status area re-opens the full room view.
@@ -681,7 +717,7 @@
     $('vcMute').onclick = () => Voice.setMute();
     $('vcDeaf').onclick = () => Voice.setDeaf();
     $('vcCam').onclick = () => Voice.toggleCam();
-    $('vcShare').onclick = () => Voice.toggleShare();
+    $('vcShare').onclick = () => openSharePicker();
     $('vcLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
     window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });
   }
@@ -815,6 +851,8 @@
     $('meAv').innerHTML = UI.avatar(me, 28);
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
+
+    devStats = !!(me.theme && me.theme.dev_mode);
 
     canManage = srv.owner_id === me.id || me.is_platform_admin;
     if (!canManage) {

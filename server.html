@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=17" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=18" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=17" />
+<link rel="stylesheet" href="assets/css/theme.css?v=18" />
 </head>
 <body>
 
@@ -89,7 +89,6 @@
         <button class="vbtn" id="vrDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
         <button class="vbtn" id="vrCam" title="Camera"><i class="fa-solid fa-video"></i></button>
         <button class="vbtn" id="vrShare" title="Share screen"><i class="fa-solid fa-display"></i></button>
-        <button class="vbtn vbtn-fps" id="vrFps" title="Target framerate">60fps</button>
         <button class="vbtn hang" id="vrLeave" title="Disconnect"><i class="fa-solid fa-phone-slash"></i></button>
       </div>
     </div>
@@ -155,6 +154,38 @@
 </div>
 
 
+<!-- Share picker -->
+<div class="overlay hidden" id="mShare">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head"><h3>Share your screen</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>What would you like to share?</label>
+        <div class="share-opts" id="shareOpts">
+          <button class="share-opt on" data-s="monitor"><i class="fa-solid fa-desktop"></i><b>Entire screen</b><small>Everything you see</small></button>
+          <button class="share-opt" data-s="window"><i class="fa-regular fa-window-maximize"></i><b>A window</b><small>One app only</small></button>
+          <button class="share-opt" data-s="browser"><i class="fa-solid fa-globe"></i><b>A browser tab</b><small>Best for video</small></button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Quality</label>
+        <div class="seg-pick" id="shareQ">
+          <button class="on" data-q="1080">1080p · 60fps</button>
+          <button data-q="720">720p · 60fps</button>
+          <button data-q="auto">Auto</button>
+        </div>
+        <span class="hint">Runs on a dedicated connection over the fastest STUN server, and scales itself down if the link can't keep up.</span>
+      </div>
+      <label class="perm" style="padding:0;"><input type="checkbox" id="shareAudio" checked> Share audio too</label>
+      <p class="err" id="shareErr"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-quiet" data-close>Cancel</button>
+      <button class="btn btn-primary" id="shareGo"><i class="fa-solid fa-display"></i> Start sharing</button>
+    </div>
+  </div>
+</div>
+
 <!-- Create channel -->
 <div class="overlay hidden" id="mChan">
   <div class="modal" style="max-width:400px;">
@@ -188,14 +219,14 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=17"></script>
-<script src="assets/js/supabase-client.js?v=17"></script>
-<script src="assets/js/ui.js?v=17"></script>
-<script src="assets/js/md.js?v=17"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=17"></script>
-<script src="assets/js/viewer.js?v=17"></script>
-<script src="assets/js/ice.js?v=17"></script>
-<script src="assets/js/voice.js?v=17"></script>
-<script src="assets/js/server.js?v=17"></script>
+<script src="assets/js/config.js?v=18"></script>
+<script src="assets/js/supabase-client.js?v=18"></script>
+<script src="assets/js/ui.js?v=18"></script>
+<script src="assets/js/md.js?v=18"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=18"></script>
+<script src="assets/js/viewer.js?v=18"></script>
+<script src="assets/js/ice.js?v=18"></script>
+<script src="assets/js/voice.js?v=18"></script>
+<script src="assets/js/server.js?v=18"></script>
 </body>
 </html>

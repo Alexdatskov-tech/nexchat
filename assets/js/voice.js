@@ -107,12 +107,9 @@ window.Voice = (function () {
   function rebuildVideo(rec) {
     const vids = rec.pc.getTransceivers().filter((t) =>
       (t.receiver.track && t.receiver.track.kind === 'video') || rec.recv.has(t));
-    const camTx = vids[0], scrTx = vids[1];
+    const camTx = vids[0];
     const camT = camTx ? (rec.recv.get(camTx) || camTx.receiver.track) : null;
-    const scrT = scrTx ? (rec.recv.get(scrTx) || scrTx.receiver.track) : null;
-    const a = setStream(rec.camStream, liveTrack(camT) ? camT : null);
-    const b = setStream(rec.screenStream, liveTrack(scrT) ? scrT : null);
-    return a || b;
+    return setStream(rec.camStream, liveTrack(camT) ? camT : null);
   }
 
   /* Offerer builds the m-line layout: audio, camera video, screen video. */
@@ -121,7 +118,8 @@ window.Voice = (function () {
     const { pc } = rec;
     rec.tx.audio = pc.addTransceiver(local.getAudioTracks()[0], { direction: 'sendrecv' });
     rec.tx.cam = pc.addTransceiver('video', { direction: 'sendrecv' });
-    rec.tx.screen = pc.addTransceiver('video', { direction: 'sendrecv' });
+    // Screen travels over its own connection, so there's no idle transceiver
+    // here to emit a phantom black tile.
     applyLocalVideo(rec);
     rec.ready = true;
     return rec;
@@ -134,13 +132,12 @@ window.Voice = (function () {
     const vids = txs.filter((t) => (t.receiver.track || {}).kind === 'video');
     rec.tx.audio = a || txs[0];
     rec.tx.cam = vids[0] || null;
-    rec.tx.screen = vids[1] || null;
     try {
       if (rec.tx.audio) {
         rec.tx.audio.direction = 'sendrecv';
         rec.tx.audio.sender.replaceTrack(local.getAudioTracks()[0]);
       }
-      [rec.tx.cam, rec.tx.screen].forEach((t) => { if (t) t.direction = 'sendrecv'; });
+      if (rec.tx.cam) rec.tx.cam.direction = 'sendrecv';
     } catch {}
     applyLocalVideo(rec);
     rebuildVideo(rec);
@@ -169,11 +166,6 @@ window.Voice = (function () {
       if (rec.tx.cam) {
         rec.tx.cam.sender.replaceTrack(cam ? camTrack : null);
         if (cam) tuneSender(rec.tx.cam.sender, targetFps, 4000);
-      }
-      if (rec.tx.screen) {
-        const st = sharing && screen ? screen.getVideoTracks()[0] : null;
-        rec.tx.screen.sender.replaceTrack(st);
-        if (st) tuneSender(rec.tx.screen.sender, targetFps, 6000);
       }
     } catch {}
   }
@@ -220,6 +212,77 @@ window.Voice = (function () {
 
   const selfProfile = () => ({ ...me, muted, deaf, cam, sharing });
 
+  /* ===================== SCREEN SHARE TUNNEL =====================
+     Screen runs on its own RTCPeerConnection per peer, over the fastest Google
+     STUN server, so it gets a clean encoder and bandwidth budget instead of
+     fighting the camera inside one bundled connection. */
+  const scrOut = new Map();   // uid -> { pc, queue }  (we are sharing to them)
+  const scrIn  = new Map();   // uid -> { pc, stream, queue }  (they share to us)
+  let screenIce = null;
+
+  function newScreenPc(iceCfg) {
+    return new RTCPeerConnection({ iceServers: iceCfg, iceCandidatePoolSize: 2, bundlePolicy: 'max-bundle' });
+  }
+
+  async function screenOfferTo(uid) {
+    if (!screen || scrOut.has(uid)) return;
+    screenIce = screenIce || await ICE.buildScreen();
+    const pc = newScreenPc(screenIce);
+    const rec = { pc, queue: [] };
+    scrOut.set(uid, rec);
+
+    screen.getTracks().forEach((t) => pc.addTrack(t, screen));
+    pc.onicecandidate = (e) => { if (e.candidate) send('s-ice', { to: uid, candidate: e.candidate }); };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') { try { pc.restartIce(); } catch {} }
+    };
+
+    const vs = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+    await tuneSender(vs, targetFps, screenQuality.kbps);
+
+    const o = await pc.createOffer();
+    await pc.setLocalDescription(o);
+    send('s-offer', { to: uid, sdp: pc.localDescription });
+  }
+
+  async function screenAnswer(uid, sdp) {
+    screenIce = screenIce || await ICE.buildScreen();
+    let rec = scrIn.get(uid);
+    if (!rec) {
+      const pc = newScreenPc(screenIce);
+      rec = { pc, stream: new MediaStream(), queue: [] };
+      scrIn.set(uid, rec);
+      pc.onicecandidate = (e) => { if (e.candidate) send('s-ice', { to: uid, candidate: e.candidate }); };
+      pc.ontrack = (e) => {
+        rec.stream.getTracks().forEach((t) => { if (t.kind === e.track.kind) rec.stream.removeTrack(t); });
+        rec.stream.addTrack(e.track);
+        e.track.onended = () => { rec.stream.removeTrack(e.track); onChange(state()); };
+        onChange(state());
+      };
+    }
+    await rec.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    while (rec.queue.length) { try { await rec.pc.addIceCandidate(new RTCIceCandidate(rec.queue.shift())); } catch {} }
+    const a = await rec.pc.createAnswer();
+    await rec.pc.setLocalDescription(a);
+    send('s-answer', { to: uid, sdp: rec.pc.localDescription });
+    onChange(state());
+  }
+
+  function closeScreenTo(uid) {
+    const o = scrOut.get(uid);
+    if (o) { try { o.pc.close(); } catch {} scrOut.delete(uid); }
+  }
+  function closeScreenFrom(uid) {
+    const i = scrIn.get(uid);
+    if (i) { try { i.pc.close(); } catch {} scrIn.delete(uid); }
+    onChange(state());
+  }
+  function teardownScreen() {
+    scrOut.forEach((_, uid) => closeScreenTo(uid));
+    scrOut.clear();
+    send('s-stop', {});
+  }
+
   /* ---------- speaking meters ---------- */
   function meter(uid, stream) {
     try {
@@ -252,7 +315,7 @@ window.Voice = (function () {
 
   /* ---------- live connection stats ---------- */
   async function pollStats() {
-    const rec = [...peers.values()][0];
+    const rec = (sharing && scrOut.size ? [...scrOut.values()][0] : null) || [...peers.values()][0];
     if (!rec) {
       const t = cam ? camTrack : (sharing && screen ? screen.getVideoTracks()[0] : null);
       const s = t?.getSettings?.() || {};
@@ -321,12 +384,14 @@ window.Voice = (function () {
           // late joiner still gets an offer from whoever was already here.
           if (lowerIsMe) await offerTo(m.from);
           else send('hello-ack', { to: m.from, profile: selfProfile() });
+          if (sharing) screenOfferTo(m.from);
           onChange(state());
         }
 
         else if (m.type === 'hello-ack') {
           members.set(m.from, m.profile);
           if (lowerIsMe && !peers.has(m.from)) await offerTo(m.from);
+          if (sharing) screenOfferTo(m.from);
           onChange(state());
         }
 
@@ -360,7 +425,27 @@ window.Voice = (function () {
           } else rec.queue.push(m.candidate);
         }
 
-        else if (m.type === 'bye') drop(m.from);
+        else if (m.type === 's-offer') await screenAnswer(m.from, m.sdp);
+
+        else if (m.type === 's-answer') {
+          const rec = scrOut.get(m.from);
+          if (rec && rec.pc.signalingState === 'have-local-offer') {
+            await rec.pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+            while (rec.queue.length) { try { await rec.pc.addIceCandidate(new RTCIceCandidate(rec.queue.shift())); } catch {} }
+          }
+        }
+
+        else if (m.type === 's-ice') {
+          const rec = scrIn.get(m.from) || scrOut.get(m.from);
+          if (!rec) return;
+          if (rec.pc.remoteDescription && rec.pc.remoteDescription.type) {
+            try { await rec.pc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch {}
+          } else rec.queue.push(m.candidate);
+        }
+
+        else if (m.type === 's-stop') closeScreenFrom(m.from);
+
+        else if (m.type === 'bye') { drop(m.from); closeScreenFrom(m.from); closeScreenTo(m.from); }
 
         else if (m.type === 'state') {
           members.set(m.from, { ...(members.get(m.from) || {}), ...m.flags });
@@ -380,7 +465,7 @@ window.Voice = (function () {
     });
 
     statTimer = setInterval(() => {
-      pollStats();
+      pollStats().then(() => autoTune(stats.fps));
       // Some browsers fire mute/unmute inconsistently, so re-derive each tick.
       let changed = false;
       peers.forEach((rec) => { if (rebuildVideo(rec)) changed = true; });
@@ -394,6 +479,9 @@ window.Voice = (function () {
     if (!chan) return;
     send('bye', {});
     peers.forEach((p, uid) => { try { p.pc.close(); } catch {} document.getElementById('va-' + uid)?.remove(); });
+    scrOut.forEach((r) => { try { r.pc.close(); } catch {} });
+    scrIn.forEach((r) => { try { r.pc.close(); } catch {} });
+    scrOut.clear(); scrIn.clear(); screenIce = null;
     peers.clear(); members.clear(); meters.clear();
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (statTimer) { clearInterval(statTimer); statTimer = null; }
@@ -456,25 +544,61 @@ window.Voice = (function () {
     pushFlags(); onChange(state());
   }
 
-  async function toggleShare() {
-    if (sharing) {
-      screen?.getTracks().forEach((t) => t.stop());
-      screen = null; sharing = false;
-    } else {
-      try {
-        screen = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { min: 24, ideal: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-        });
-        const st = screen.getVideoTracks()[0];
-        try { st.contentHint = 'motion'; } catch {}
-        st.onended = () => { if (sharing) toggleShare(); };
-        sharing = true;
-      } catch { return; }
-    }
-    peers.forEach(applyLocalVideo);
+  const screenSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  let screenQuality = { w: 1920, h: 1080, kbps: 8000 };
+
+  async function stopShare() {
+    if (!sharing) return;
+    screen?.getTracks().forEach((t) => t.stop());
+    screen = null; sharing = false;
+    teardownScreen();
     pushFlags(); onChange(state());
   }
+
+  /* opts: { surface: 'monitor'|'window'|'browser', quality: '1080'|'720'|'auto', audio: bool } */
+  async function startShare(opts = {}) {
+    if (sharing) return stopShare();
+    if (!screenSupported()) {
+      UI.toast('Screen sharing isn\u2019t supported by this browser — it needs a desktop browser.', true);
+      return;
+    }
+    const q = opts.quality || '1080';
+    screenQuality = q === '720' ? { w: 1280, h: 720, kbps: 5000 }
+                  : q === 'auto' ? { w: 1920, h: 1080, kbps: 4000 }
+                  : { w: 1920, h: 1080, kbps: 8000 };
+
+    const video = {
+      frameRate: { min: 30, ideal: 60 },
+      width: { ideal: screenQuality.w, max: screenQuality.w },
+      height: { ideal: screenQuality.h, max: screenQuality.h },
+    };
+    if (opts.surface) video.displaySurface = opts.surface;
+
+    try {
+      screen = await navigator.mediaDevices.getDisplayMedia({
+        video,
+        audio: opts.audio === false ? false
+          : { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'include',
+        systemAudio: opts.audio === false ? 'exclude' : 'include',
+      });
+    } catch (err) {
+      if (err && err.name !== 'NotAllowedError') UI.toast('Could not start sharing: ' + err.message, true);
+      return;
+    }
+
+    const st = screen.getVideoTracks()[0];
+    try { st.contentHint = 'motion'; } catch {}
+    try { await st.applyConstraints({ frameRate: { min: 30, ideal: 60 } }); } catch {}
+    st.onended = () => stopShare();
+    sharing = true;
+
+    for (const uid of members.keys()) if (uid !== me.id) await screenOfferTo(uid);
+    pushFlags(); onChange(state());
+  }
+
+  const toggleShare = () => (sharing ? stopShare() : startShare());
 
   /* Developer mode: swap STUN servers without dropping the active call. */
   async function setManualStun(list) {
@@ -497,21 +621,48 @@ window.Voice = (function () {
     return s && s.getVideoTracks().some(liveTrack) ? s : null;
   };
   const peerScreen = (uid) => {
-    const s = peers.get(uid)?.screenStream;
-    return s && s.getVideoTracks().some(liveTrack) ? s : null;
+    const s = scrIn.get(uid)?.stream;
+    return s && s.getVideoTracks().some((t) => t.readyState === 'live') ? s : null;
   };
 
-  async function setTargetFps(fps) {
-    targetFps = fps;
-    if (camTrack) { try { await camTrack.applyConstraints({ frameRate: { min: Math.min(24, fps), ideal: fps } }); } catch {} }
-    peers.forEach((rec) => {
-      if (cam) tuneSender(rec.tx.cam?.sender, fps, 4000);
-      if (sharing) tuneSender(rec.tx.screen?.sender, fps, 6000);
-    });
+  /* Watches delivered framerate and eases resolution down (never framerate)
+     when the encoder can't keep up, then walks it back once things settle. */
+  let scaleDown = 1, lowStreak = 0, goodStreak = 0;
+  async function autoTune(fps) {
+    if (!cam && !sharing) { scaleDown = 1; lowStreak = goodStreak = 0; return; }
+    if (!fps) return;
+    const target = targetFps;
+
+    if (fps < target * 0.7) { lowStreak++; goodStreak = 0; } 
+    else if (fps > target * 0.9) { goodStreak++; lowStreak = 0; }
+    else { lowStreak = goodStreak = 0; }
+
+    let next = scaleDown;
+    if (lowStreak >= 4 && scaleDown < 4) next = Math.min(4, scaleDown * 1.5);
+    else if (goodStreak >= 12 && scaleDown > 1) next = Math.max(1, scaleDown / 1.5);
+    if (next === scaleDown) return;
+
+    scaleDown = next; lowStreak = goodStreak = 0;
+    const apply = async (sender) => {
+      if (!sender) return;
+      try {
+        const p = sender.getParameters();
+        p.degradationPreference = 'maintain-framerate';
+        p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
+        p.encodings[0].scaleResolutionDownBy = scaleDown;
+        p.encodings[0].maxFramerate = target;
+        await sender.setParameters(p);
+      } catch {}
+    };
+    for (const rec of peers.values()) if (cam) await apply(rec.tx.cam?.sender);
+    for (const rec of scrOut.values()) {
+      await apply(rec.pc.getSenders().find((s) => s.track && s.track.kind === 'video'));
+    }
   }
 
   return {
-    join, leave, setMute, setDeaf, toggleCam, toggleShare, state, speaking, setTargetFps,
+    join, leave, setMute, setDeaf, toggleCam, toggleShare, startShare, stopShare,
+    screenSupported, state, speaking,
     get targetFps() { return targetFps; },
     localCam, localScreen, peerCam, peerScreen, setManualStun,
     get iceServers() { return iceServers; },

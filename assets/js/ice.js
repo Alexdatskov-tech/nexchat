@@ -83,9 +83,22 @@ window.ICE = (function () {
     return [{ urls: chosen }, ...TURN];
   }
 
+  /* Fastest Google STUN specifically — used for the dedicated screen-share
+     tunnel, which wants the lowest-latency path it can get. */
+  async function bestGoogle() {
+    const g = STUN.filter((u) => u.includes('l.google.com'));
+    const ranked = await rank(STUN);
+    const hit = ranked.find((r) => g.includes(r.url) && r.ms !== null);
+    return hit ? hit.url : g[0];
+  }
+
+  async function buildScreen() {
+    return [{ urls: await bestGoogle() }, ...TURN];
+  }
+
   function lastProbe() {
     try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null')?.list || []; } catch { return []; }
   }
 
-  return { STUN, TURN, probe, rank, build, lastProbe };
+  return { STUN, TURN, probe, rank, build, buildScreen, bestGoogle, lastProbe };
 })();
