@@ -232,6 +232,20 @@
         <div class="bsub">Sign out on this device.</div>
         <button class="btn btn-danger" id="btnOut">Sign out</button>
       </div>
+      <div class="set-block" style="border-color:rgba(229,72,77,.35);">
+        <h4 style="color:#FF8085;">Delete account</h4>
+        <div class="bsub" style="color:#FF8085;">
+          This is permanent and cannot be undone. All your servers, messages, friends and profile data will be removed.
+        </div>
+        <div class="set-rows">
+          <div class="field">
+            <label for="fDelPass">Enter your password to confirm</label>
+            <input id="fDelPass" type="password" autocomplete="current-password" placeholder="Your current password" />
+          </div>
+          <p class="err" id="delErr"></p>
+        </div>
+        <button class="btn btn-danger" id="btnDel" style="margin-top:4px;">Delete my account</button>
+      </div>
     </section>
 
     <!-- DEVELOPER -->

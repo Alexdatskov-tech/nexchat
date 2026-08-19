@@ -365,6 +365,39 @@
 
   $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
 
+  // ---- delete account ----
+  const toAddr = (u) => `${u.trim().toLowerCase()}@users.nexchat-app.com`;
+
+  $('btnDel').onclick = async () => {
+    const pass = $('fDelPass').value;
+    $('delErr').textContent = '';
+    if (!pass) return ($('delErr').textContent = 'Enter your password to continue.');
+
+    const okd = await UI.confirmDialog(
+      'Delete account',
+      'This will permanently remove your account, all your servers, messages, friends and profile data. This cannot be undone.',
+      true, 'Delete my account');
+    if (!okd) return;
+
+    const btn = $('btnDel'); btn.disabled = true; btn.textContent = 'Deleting…';
+    try {
+      // Re-authenticate to verify the password is correct.
+      const { error: signInErr } = await window.db.auth.signInWithPassword({
+        email: toAddr(me.username), password: pass,
+      });
+      if (signInErr) throw new Error('Wrong password.');
+
+      const { error: rpcErr } = await window.db.rpc('delete_my_account');
+      if (rpcErr) throw rpcErr;
+
+      UI.toast('Your account has been deleted.');
+      window.location.href = 'index.html';
+    } catch (err) {
+      $('delErr').textContent = err.message || 'Could not delete account.';
+      btn.disabled = false; btn.textContent = 'Delete my account';
+    }
+  };
+
   function hydrate() {
     $('fDisplay').value = me.display_name || '';
     $('fBio').value = me.bio || '';
